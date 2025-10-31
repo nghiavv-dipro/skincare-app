@@ -1,0 +1,111 @@
+{
+  "common": {
+    "loading": "Đang tải...",
+    "error": "Lỗi",
+    "success": "Thành công",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "back": "Quay lại",
+    "orders": "Đơn hàng"
+  },
+  "order": {
+    "title": "Chi tiết đơn hàng",
+    "orderNumber": "Đơn hàng #{{number}}",
+    "status": {
+      "fulfilled": "Đã giao ({{count}})",
+      "unfulfilled": "Chưa giao",
+      "paid": "Đã thanh toán"
+    },
+    "fulfillment": {
+      "title": "Giao hàng",
+      "location": "Vị trí",
+      "trackingNumber": "Tracking",
+      "deliveryStatus": "Trạng thái giao hàng",
+      "noTracking": "Chưa có tracking",
+      "noDeliveryStatus": "Chưa có trạng thái",
+      "gettingTracking": "Đang lấy tracking...",
+      "gettingDeliveryStatus": "Đang lấy trạng thái..."
+    },
+    "actions": {
+      "getTrackingNumber": "Lấy Mã Xuất Kho",
+      "getDeliveryStatus": "Lấy Trạng Thái Giao Hàng",
+      "note": "Lưu ý: Lấy Mã Xuất Kho trước để lấy thông tin vận chuyển từ nhà cung cấp. Sau đó sử dụng Lấy Trạng Thái Giao Hàng để kiểm tra trạng thái hiện tại."
+    },
+    "payment": {
+      "title": "Thanh toán",
+      "total": "Tổng cộng",
+      "items": "{{count}} sản phẩm",
+      "paid": "Đã thanh toán"
+    },
+    "customer": {
+      "title": "Khách hàng",
+      "orders": "{{count}} đơn hàng",
+      "noOrders": "Chưa có đơn hàng",
+      "phone": "Điện thoại",
+      "contactInfo": "Thông tin liên hệ",
+      "noPhone": "Chưa có số điện thoại",
+      "shippingAddress": "Địa chỉ giao hàng",
+      "noShippingAddress": "Chưa có địa chỉ giao hàng",
+      "billingAddress": "Địa chỉ thanh toán",
+      "noBillingAddress": "Chưa có địa chỉ thanh toán",
+      "sameAsShipping": "Giống địa chỉ giao hàng",
+      "viewMap": "Xem bản đồ"
+    },
+    "product": {
+      "title": "Sản phẩm",
+      "price": "Giá × SL",
+      "total": "Tổng"
+    },
+    "toast": {
+      "deliveryStatusSuccess": "Lấy trạng thái vận chuyển thành công: {{status}}",
+      "trackingNumberSuccess": "Lấy mã xuất kho thành công: {{number}}",
+      "error": "Lỗi: {{message}}"
+    },
+    "loading": {
+      "message": "Đang tải thông tin đơn hàng từ Shopify..."
+    }
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "language": {
+      "title": "Ngôn ngữ",
+      "description": "Chọn ngôn ngữ bạn muốn sử dụng",
+      "english": "English",
+      "vietnamese": "Tiếng Việt",
+      "japanese": "日本語",
+      "saveSuccess": "Lưu ngôn ngữ thành công"
+    }
+  },
+  "ordersList": {
+    "title": "Danh sách đơn hàng",
+    "search": {
+      "label": "Tìm kiếm đơn hàng",
+      "placeholder": "Tìm theo mã đơn hàng, tên khách hàng, trạng thái thanh toán...",
+      "button": "Tìm kiếm"
+    },
+    "loading": "Đang tải dữ liệu từ Shopify...",
+    "emptyState": "Chưa có đơn hàng nào. Đơn hàng sẽ tự động hiển thị khi có khách hàng đặt hàng.",
+    "table": {
+      "orderId": "Mã đơn hàng",
+      "orderDate": "Ngày đặt",
+      "customer": "Khách hàng",
+      "totalPrice": "Tổng tiền",
+      "paymentStatus": "Trạng thái thanh toán",
+      "quantity": "Số lượng",
+      "saleOrderId": "Mã đơn bán hàng",
+      "deliveryStatus": "Trạng thái giao hàng"
+    },
+    "paymentStatus": {
+      "paid": "Đã thanh toán",
+      "unpaid": "Chưa thanh toán"
+    },
+    "itemsCount": "{{count}} sản phẩm",
+    "pagination": {
+      "previous": "Trang trước",
+      "next": "Trang sau",
+      "page": "Trang {{current}} / {{total}}"
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "common": {
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "back": "戻る",
+    "orders": "注文"
+  },
+  "order": {
+    "title": "注文詳細",
+    "orderNumber": "注文 #{{number}}",
+    "status": {
+      "fulfilled": "配送済み ({{count}})",
+      "unfulfilled": "未配送",
+      "paid": "支払い済み"
+    },
+    "fulfillment": {
+      "title": "配送",
+      "location": "場所",
+      "trackingNumber": "追跡番号",
+      "deliveryStatus": "配送状況",
+      "noTracking": "追跡情報なし",
+      "noDeliveryStatus": "配送状況なし",
+      "gettingTracking": "追跡番号を取得中...",
+      "gettingDeliveryStatus": "配送状況を取得中..."
+    },
+    "actions": {
+      "getTrackingNumber": "追跡番号を取得",
+      "getDeliveryStatus": "配送状況を取得",
+      "note": "注意：まず追跡番号を取得して配送業者から追跡情報を取得してください。その後、配送状況を取得して現在の状況を確認できます。"
+    },
+    "payment": {
+      "title": "支払い",
+      "total": "合計",
+      "items": "{{count}} 商品",
+      "paid": "支払い済み"
+    },
+    "customer": {
+      "title": "お客様",
+      "orders": "{{count}} 件の注文",
+      "noOrders": "注文なし",
+      "phone": "電話",
+      "contactInfo": "連絡先情報",
+      "noPhone": "電話番号なし",
+      "shippingAddress": "配送先住所",
+      "noShippingAddress": "配送先住所なし",
+      "billingAddress": "請求先住所",
+      "noBillingAddress": "請求先住所なし",
+      "sameAsShipping": "配送先住所と同じ",
+      "viewMap": "地図を見る"
+    },
+    "product": {
+      "title": "商品",
+      "price": "価格 × 数量",
+      "total": "合計"
+    },
+    "toast": {
+      "deliveryStatusSuccess": "配送状況の取得に成功しました: {{status}}",
+      "trackingNumberSuccess": "追跡番号の取得に成功しました: {{number}}",
+      "error": "エラー: {{message}}"
+    },
+    "loading": {
+      "message": "Shopifyから注文情報を読み込んでいます..."
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "language": {
+      "title": "言語",
+      "description": "使用言語を選択してください",
+      "english": "English",
+      "vietnamese": "Tiếng Việt",
+      "japanese": "日本語",
+      "saveSuccess": "言語設定を保存しました"
+    }
+  },
+  "ordersList": {
+    "title": "注文一覧",
+    "search": {
+      "label": "注文を検索",
+      "placeholder": "注文番号、顧客名、支払い状況で検索...",
+      "button": "検索"
+    },
+    "loading": "Shopifyからデータを読み込んでいます...",
+    "emptyState": "注文はまだありません。お客様が注文すると自動的に表示されます。",
+    "table": {
+      "orderId": "注文番号",
+      "orderDate": "注文日",
+      "customer": "お客様",
+      "totalPrice": "合計",
+      "paymentStatus": "支払い状況",
+      "quantity": "数量",
+      "saleOrderId": "販売注文ID",
+      "deliveryStatus": "配送状況"
+    },
+    "paymentStatus": {
+      "paid": "支払い済み",
+      "unpaid": "未払い"
+    },
+    "itemsCount": "{{count}} 商品",
+    "pagination": {
+      "previous": "前へ",
+      "next": "次へ",
+      "page": "ページ {{current}} / {{total}}"
+    }
+  }
+}

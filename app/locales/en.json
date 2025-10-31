@@ -1,0 +1,111 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "orders": "Orders"
+  },
+  "order": {
+    "title": "Order Details",
+    "orderNumber": "Order #{{number}}",
+    "status": {
+      "fulfilled": "Fulfilled ({{count}})",
+      "unfulfilled": "Unfulfilled",
+      "paid": "Paid"
+    },
+    "fulfillment": {
+      "title": "Fulfillment",
+      "location": "Location",
+      "trackingNumber": "Tracking",
+      "deliveryStatus": "Delivery",
+      "noTracking": "No tracking",
+      "noDeliveryStatus": "No delivery status",
+      "gettingTracking": "Getting tracking...",
+      "gettingDeliveryStatus": "Getting status..."
+    },
+    "actions": {
+      "getTrackingNumber": "Get Tracking Number",
+      "getDeliveryStatus": "Get Delivery Status",
+      "note": "Note: Get Tracking Number first to fetch tracking info from carrier. Then use Get Delivery Status to check current delivery status."
+    },
+    "payment": {
+      "title": "Payment",
+      "total": "Total",
+      "items": "{{count}} items",
+      "paid": "Paid"
+    },
+    "customer": {
+      "title": "Customer",
+      "orders": "{{count}} orders",
+      "noOrders": "No orders",
+      "phone": "phone",
+      "contactInfo": "Contact information",
+      "noPhone": "No phone number",
+      "shippingAddress": "Shipping address",
+      "noShippingAddress": "No shipping address",
+      "billingAddress": "Billing address",
+      "noBillingAddress": "No billing address",
+      "sameAsShipping": "Same as shipping address",
+      "viewMap": "View map"
+    },
+    "product": {
+      "title": "Product",
+      "price": "Price × Qty",
+      "total": "Total"
+    },
+    "toast": {
+      "deliveryStatusSuccess": "Delivery status retrieved successfully: {{status}}",
+      "trackingNumberSuccess": "Tracking number retrieved successfully: {{number}}",
+      "error": "Error: {{message}}"
+    },
+    "loading": {
+      "message": "Loading order information from Shopify..."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "language": {
+      "title": "Language",
+      "description": "Choose your preferred language",
+      "english": "English",
+      "vietnamese": "Tiếng Việt",
+      "japanese": "日本語",
+      "saveSuccess": "Language preference saved successfully"
+    }
+  },
+  "ordersList": {
+    "title": "Orders List",
+    "search": {
+      "label": "Search orders",
+      "placeholder": "Search by order ID, customer name, payment status...",
+      "button": "Search"
+    },
+    "loading": "Loading data from Shopify...",
+    "emptyState": "No orders yet. Orders will automatically appear when customers place orders.",
+    "table": {
+      "orderId": "Order ID",
+      "orderDate": "Order Date",
+      "customer": "Customer",
+      "totalPrice": "Total",
+      "paymentStatus": "Payment Status",
+      "quantity": "Quantity",
+      "saleOrderId": "Sale Order ID",
+      "deliveryStatus": "Delivery Status"
+    },
+    "paymentStatus": {
+      "paid": "Paid",
+      "unpaid": "Unpaid"
+    },
+    "itemsCount": "{{count}} items",
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {{current}} / {{total}}"
+    }
+  }
+}
