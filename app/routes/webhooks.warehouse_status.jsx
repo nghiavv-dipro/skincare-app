@@ -1,5 +1,5 @@
 import { json } from "@remix-run/node";
-import { unauthenticated, sessionStorage } from "../shopify.server";
+import { unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
 
 /**
