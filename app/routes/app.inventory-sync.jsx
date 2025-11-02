@@ -18,7 +18,6 @@ import { authenticate } from "../shopify.server";
 import { syncInventoryToShopify } from "../services/inventorySync.server";
 import {
   createSyncLog,
-  completeSyncLog,
   failSyncLog,
 } from "../services/syncLogger.server";
 
@@ -34,7 +33,7 @@ export const action = async ({ request }) => {
     const result = await syncInventoryToShopify(admin);
 
     // Update log với kết quả
-    await completeSyncLog(syncLog.id, result);
+    // await completeSyncLog(syncLog.id, result);
 
     return json({
       success: result.success,
@@ -43,7 +42,7 @@ export const action = async ({ request }) => {
       summary: result.summary,
       results: result.results,
       errors: result.errors,
-      logId: syncLog.id,
+      // logId: syncLog.id,
     });
   } catch (error) {
     console.error("[Inventory Sync Page] Error:", error);

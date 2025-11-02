@@ -13,16 +13,16 @@ import prisma from "../db.server";
  */
 export async function createSyncLog(shop) {
   try {
-    const log = await prisma.inventorySyncLog.create({
-      data: {
-        shop,
-        status: "running",
-        started_at: new Date(),
-      },
-    });
+    // const log = await prisma.inventorySyncLog.create({
+    //   data: {
+    //     shop,
+    //     status: "running",
+    //     started_at: new Date(),
+    //   },
+    // });
 
-    console.log(`[Sync Logger] Created sync log #${log.id} for shop: ${shop}`);
-    return log;
+    // console.log(`[Sync Logger] Created sync log #${log.id} for shop: ${shop}`);
+    // return log;
   } catch (error) {
     console.error("[Sync Logger] Error creating sync log:", error);
     throw error;
