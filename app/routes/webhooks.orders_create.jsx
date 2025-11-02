@@ -19,7 +19,7 @@ export async function action({ request }) {
 
     // Get tracking number from carrier API
     console.log(`[Webhook] Getting tracking number from carrier...`);
-    const trackingResult = await getTrackingNumber(orderId);
+    const trackingResult = await getTrackingNumber(admin, orderId);
 
     if (trackingResult.success) {
       console.log(`[Webhook] ✅ Tracking number received: ${trackingResult.trackingNumber}`);

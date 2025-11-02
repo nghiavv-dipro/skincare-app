@@ -242,7 +242,7 @@ export const action = async ({ request, params }) => {
 
   if (actionType === "getTrackingNumber") {
     // Get tracking number from carrier API using order ID
-    const result = await getTrackingNumber(orderId);
+    const result = await getTrackingNumber(admin, orderId);
 
     if (result.success) {
       // Save tracking number to custom.sale_order_id (as per the flow)
@@ -251,12 +251,17 @@ export const action = async ({ request, params }) => {
           key: "sale_order_id",
           value: result.trackingNumber,
         },
+        {
+          key: "delivery_status",
+          value: result.deliveryStatus,
+        },
       ]);
 
       return json({
         success: true,
         actionType: "getTrackingNumber",
         trackingNumber: result.trackingNumber,
+        deliveryStatus: result.deliveryStatus
       });
     } else {
       return json({

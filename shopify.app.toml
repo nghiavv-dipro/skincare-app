@@ -2,7 +2,7 @@
 
 client_id = "a16d4bef50f9dcd27eb5417000792927"
 name = "skincare-delivery-app"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://jessia-unpanicky-meagan.ngrok-free.dev"
 embedded = true
 
 [build]
@@ -13,7 +13,7 @@ api_version = "2026-01"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_locations, read_markets_home, read_customers, write_customers, write_products, write_orders, read_all_orders, read_inventory,write_inventory"
+scopes = "read_locations, read_markets_home, read_customers, write_customers, write_products, write_orders, read_inventory, write_inventory"
 
 [auth]
-redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+redirect_urls = [ "https://jessia-unpanicky-meagan.ngrok-free.dev/api/auth" ]

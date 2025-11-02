@@ -171,11 +171,9 @@ export async function getDeliveryStatus(trackingNumber) {
     }
 
     // Call carrier API to get delivery status
-    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/tracking/${trackingNumber}/status`, {
+    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/sale-orders/${trackingNumber}`, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
         'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
       },
     });
@@ -191,8 +189,7 @@ export async function getDeliveryStatus(trackingNumber) {
 
     return {
       success: true,
-      deliveryStatus: data.delivery_status,
-      statusDetails: data.status_details,
+      deliveryStatus: data.status_id,
     };
   } catch (error) {
     console.error("[Carrier API] Error getting delivery status:", error);
@@ -225,11 +222,125 @@ function getMockDeliveryStatus(trackingNumber) {
 }
 
 /**
+ * Fetch Shopify order data using GraphQL
+ * @param {Object} admin - Shopify admin API client
+ * @param {string} shopifyOrderId - Shopify order ID (gid://shopify/Order/xxx format)
+ * @returns {Promise<Object|null>}
+ */
+async function fetchShopifyOrder(admin, shopifyOrderId) {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query getOrder($id: ID!) {
+          order(id: $id) {
+            id
+            name
+            note
+            currencyCode
+            customer {
+              firstName
+              lastName
+              phone
+            }
+            shippingAddress {
+              name
+              address1
+              address2
+              city
+              province
+              country
+              phone
+            }
+            lineItems(first: 100) {
+              edges {
+                node {
+                  id
+                  title
+                  sku
+                  quantity
+                  originalUnitPriceSet {
+                    shopMoney {
+                      amount
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }`,
+      {
+        variables: {
+          id: shopifyOrderId,
+        },
+      }
+    );
+
+    const data = await response.json();
+    return data.data?.order || null;
+  } catch (error) {
+    console.error("[Warehouse Order API] Error fetching Shopify order:", error);
+    return null;
+  }
+}
+
+/**
+ * Format Shopify order data to warehouse API format
+ * @param {Object} shopifyOrder - Order data from Shopify GraphQL
+ * @returns {Object}
+ */
+function formatOrderForWarehouse(shopifyOrder) {
+  // Extract line items with SKU
+  const items = [];
+
+  for (const edge of shopifyOrder.lineItems.edges) {
+    const lineItem = edge.node;
+
+    // Skip if no SKU
+    if (!lineItem.sku) {
+      console.warn(`[Warehouse Order API] Line item ${lineItem.title} has no SKU, skipping`);
+      continue;
+    }
+
+    items.push({
+      sku: lineItem.sku,
+      quantity: lineItem.quantity,
+      price: parseFloat(lineItem.originalUnitPriceSet.shopMoney.amount) * 100, // Convert to cents
+      tax_rate: 0,
+    });
+  }
+
+  // Build shipping address
+  const shippingAddress = shopifyOrder.shippingAddress;
+  const fullAddress = [
+    shippingAddress.address1,
+    shippingAddress.address2,
+    shippingAddress.city,
+    shippingAddress.province,
+    shippingAddress.country,
+  ].filter(Boolean).join(', ');
+
+  return {
+    warehouse_id: parseInt(process.env.WAREHOUSE_ID || '7'), // Default to 7 (Narita - JP)
+    shop_id: process.env.WAREHOUSE_SHOP_ID,
+    currency_id: 'VND',
+    items: items,
+    shippingAddress: {
+      full_address: fullAddress,
+      full_name: shippingAddress.name || `${shopifyOrder.customer?.firstName || ''} ${shopifyOrder.customer?.lastName || ''}`.trim(),
+      phone_number: shippingAddress.phone || shopifyOrder.customer?.phone || '',
+      note: shopifyOrder.note || '',
+      customer_pay: true, // Default: customer pays shipping
+    },
+  };
+}
+
+/**
  * Lấy tracking number từ carrier API
- * @param {string} orderId - Shopify Order ID
+ * @param {Object} admin - Shopify admin API client
+ * @param {string} orderId - Shopify Order ID (numeric)
  * @returns {Promise<{success: boolean, trackingNumber: string, trackingUrl?: string, error?: string}>}
  */
-export async function getTrackingNumber(orderId) {
+export async function getTrackingNumber(admin, orderId) {
   try {
     console.log(`[Carrier API] Getting tracking number for order: ${orderId}`);
 
@@ -246,30 +357,51 @@ export async function getTrackingNumber(orderId) {
       throw new Error("WAREHOUSE_API_URL not configured");
     }
 
-    // Call carrier API to get tracking number for this order
-    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/orders/${orderId}/tracking`, {
-      method: 'GET',
+    if (!process.env.WAREHOUSE_SHOP_ID) {
+      throw new Error("WAREHOUSE_SHOP_ID not configured");
+    }
+
+    // Fetch order data from Shopify
+    const shopifyOrderId = `gid://shopify/Order/${orderId}`;
+    const shopifyOrder = await fetchShopifyOrder(admin, shopifyOrderId);
+
+    if (!shopifyOrder) {
+      throw new Error(`Order ${orderId} not found in Shopify`);
+    }
+
+    // Format order data to match warehouse API requirements
+    const warehouseOrderData = formatOrderForWarehouse(shopifyOrder);
+    console.log('warehouseOrderData ---');
+    console.log(warehouseOrderData);
+    console.log(`[Carrier API] Sending order data to warehouse API:`, JSON.stringify(warehouseOrderData, null, 2));
+
+    // Call warehouse API to create sale order and get tracking number
+    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/sale-orders`, {
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
       },
+      body: JSON.stringify(warehouseOrderData),
     });
+
+    console.log('response -----');
+    console.log(response);
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Carrier API returned ${response.status}: ${errorText}`);
+      throw new Error(`Warehouse API returned ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
 
-    console.log(`[Carrier API] ✅ Got tracking number: ${data.tracking_number}`);
+    console.log(`[Carrier API] ✅ Got tracking number: ${data.id}`);
 
     return {
       success: true,
-      trackingNumber: data.tracking_number,
-      trackingUrl: data.tracking_url,
-      carrier: data.carrier,
+      trackingNumber: data.id,
+      deliveryStatus: data.status_id,
     };
   } catch (error) {
     console.error("[Carrier API] Error getting tracking number:", error);
@@ -280,6 +412,8 @@ export async function getTrackingNumber(orderId) {
   }
 }
 
+/**
+ * Mock function for getting tracking number
 /**
  * Mock function for getting tracking number
  * @param {string} orderId
