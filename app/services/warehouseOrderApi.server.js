@@ -38,7 +38,33 @@ export async function createWarehouseSaleOrder(shopifyOrder, admin) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Warehouse API returned ${response.status}: ${errorText}`);
+
+      // Log chi tiết lỗi API để debug
+      console.error("[Warehouse Order API] ❌ Warehouse API error:", {
+        status: response.status,
+        statusText: response.statusText,
+        shopifyOrder: shopifyOrder.name,
+        responseBody: errorText,
+      });
+
+      // Parse error message nếu có
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.message) {
+          console.error("[Warehouse Order API] API error message:", errorData.message);
+        }
+        if (errorData.errors) {
+          console.error("[Warehouse Order API] API validation errors:", errorData.errors);
+        }
+      } catch (parseError) {
+        console.error("[Warehouse Order API] Raw error:", errorText);
+      }
+
+      // Return generic error message
+      return {
+        success: false,
+        error: "Không thể lấy mã vận chuyển, vui lòng thử lại",
+      };
     }
 
     const data = await response.json();
@@ -52,10 +78,12 @@ export async function createWarehouseSaleOrder(shopifyOrder, admin) {
       warehouseOrderData: data,
     };
   } catch (error) {
-    console.error("[Warehouse Order API] Error creating sale order:", error);
+    console.error("[Warehouse Order API] ❌ Error creating sale order:", error);
+
+    // Return generic error message
     return {
       success: false,
-      error: error.message,
+      error: "Không thể lấy mã vận chuyển, vui lòng thử lại",
     };
   }
 }
@@ -136,7 +164,30 @@ export async function getDeliveryStatus(trackingNumber) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Carrier API returned ${response.status}: ${errorText}`);
+
+      // Log chi tiết lỗi API để debug
+      console.error("[Carrier API] ❌ Warehouse API error:", {
+        status: response.status,
+        statusText: response.statusText,
+        trackingNumber: trackingNumber,
+        responseBody: errorText,
+      });
+
+      // Parse error message nếu có
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.message) {
+          console.error("[Carrier API] API error message:", errorData.message);
+        }
+      } catch (parseError) {
+        console.error("[Carrier API] Raw error:", errorText);
+      }
+
+      // Return generic error message
+      return {
+        success: false,
+        error: "Không thể lấy trạng thái vận đơn",
+      };
     }
 
     const data = await response.json();
@@ -148,10 +199,12 @@ export async function getDeliveryStatus(trackingNumber) {
       deliveryStatus: data.status_id,
     };
   } catch (error) {
-    console.error("[Carrier API] Error getting delivery status:", error);
+    console.error("[Carrier API] ❌ Error getting delivery status:", error);
+
+    // Return generic error message
     return {
       success: false,
-      error: error.message,
+      error: "Không thể lấy trạng thái vận đơn",
     };
   }
 }
@@ -318,7 +371,34 @@ export async function getTrackingNumber(admin, orderId) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Warehouse API returned ${response.status}: ${errorText}`);
+
+      // Log chi tiết lỗi API để debug
+      console.error("[Carrier API] ❌ Warehouse API error:", {
+        status: response.status,
+        statusText: response.statusText,
+        responseBody: errorText,
+      });
+
+      // Parse error message nếu có
+      let apiErrorMessage = "Không thể tạo đơn hàng từ kho";
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.message) {
+          console.error("[Carrier API] API error message:", errorData.message);
+        }
+        if (errorData.errors) {
+          console.error("[Carrier API] API validation errors:", errorData.errors);
+        }
+      } catch (parseError) {
+        // Không parse được JSON, dùng raw text
+        console.error("[Carrier API] Raw error:", errorText);
+      }
+
+      // Return generic error message (không expose API details)
+      return {
+        success: false,
+        error: apiErrorMessage,
+      };
     }
 
     const data = await response.json();
@@ -331,10 +411,12 @@ export async function getTrackingNumber(admin, orderId) {
       deliveryStatus: data.status_id,
     };
   } catch (error) {
-    console.error("[Carrier API] Error getting tracking number:", error);
+    console.error("[Carrier API] ❌ Error getting tracking number:", error);
+
+    // Return generic error message
     return {
       success: false,
-      error: error.message,
+      error: "Không thể lấy mã vận đơn từ kho",
     };
   }
 }
