@@ -119,10 +119,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.log(
       `✅ [${webhookId}] Tracking number: ${trackingNumber}, Status: ${deliveryStatus}`,
     );
+    console.log(`📦 [${webhookId}] Warehouse response:`, JSON.stringify(warehouseResult, null, 2));
 
     // Update order metafields
     const { admin } = await authenticate.admin(request);
     const orderId = orderPayload.admin_graphql_api_id;
+
+    console.log(`📦 [${webhookId}] Updating metafields for order: ${orderId}`);
 
     const metafieldResponse = await admin.graphql(
       `#graphql
@@ -175,6 +178,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     console.log(`✅ [${webhookId}] Order metafields updated successfully`);
+    console.log(`📦 [${webhookId}] Metafield data:`, JSON.stringify(metafieldData, null, 2));
 
     return json({
       success: true,
