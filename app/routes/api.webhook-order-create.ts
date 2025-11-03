@@ -55,19 +55,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
 
     console.log(`📦 [${webhookId}] Calling warehouse API...`);
+    console.log(`📦 [${webhookId}] Request body:`, JSON.stringify(warehouseOrderData, null, 2));
 
     // Call warehouse API
+    const headers: HeadersInit = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+
+    if (process.env.WAREHOUSE_API_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.WAREHOUSE_API_TOKEN}`;
+    }
+
     const response = await fetch(
       `${process.env.WAREHOUSE_API_URL}/sale-orders`,
       {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Authorization: process.env.WAREHOUSE_API_TOKEN
-            ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}`
-            : undefined,
-        },
+        headers,
         body: JSON.stringify(warehouseOrderData),
       },
     );

@@ -238,7 +238,6 @@ async function findOrderBySaleOrderId(admin, saleOrderId) {
       console.log(`[Warehouse Status Webhook] ✅ Found order ${order.name} (${order.id})`);
       return order.id;
     } else {
-      console.warn(`[Warehouse Status Webhook] ⚠️ Metafield mismatch - Expected: ${saleOrderId}, Got: ${metafieldValue}`);
       return null;
     }
   } catch (error) {
