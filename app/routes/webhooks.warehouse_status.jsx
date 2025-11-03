@@ -179,28 +179,26 @@ export async function action({ request }) {
 
 /**
  * Find Shopify order ID by sale_order_id metafield
+ * Optimized: Only fetch 1 order, only fetch needed metafield
  * @param {Object} admin - Shopify admin API client
  * @param {string} saleOrderId - The warehouse sale order ID (e.g., "OR00100005255")
  * @returns {Promise<string|null>} - Shopify order GID or null if not found
  */
 async function findOrderBySaleOrderId(admin, saleOrderId) {
   try {
-    // Search for orders with matching sale_order_id metafield
+    console.log(`[Warehouse Status Webhook] Searching for order with sale_order_id: ${saleOrderId}`);
+
+    // Optimized query: only fetch 1 order, only fetch the specific metafield we need
     const response = await admin.graphql(
       `#graphql
-        query findOrderBySaleOrderId($query: String!) {
-          orders(first: 10, query: $query) {
+        query findOrderBySaleOrderId($namespace: String!, $key: String!, $saleOrderId: String!) {
+          orders(first: 1, query: $saleOrderId) {
             edges {
               node {
                 id
                 name
-                metafields(first: 10, namespace: "custom") {
-                  edges {
-                    node {
-                      key
-                      value
-                    }
-                  }
+                metafield(namespace: $namespace, key: $key) {
+                  value
                 }
               }
             }
@@ -208,52 +206,40 @@ async function findOrderBySaleOrderId(admin, saleOrderId) {
         }`,
       {
         variables: {
-          query: `metafield.custom.sale_order_id:${saleOrderId}`,
+          namespace: "custom",
+          key: "sale_order_id",
+          saleOrderId: `metafield.custom.sale_order_id:${saleOrderId}`,
         },
       }
     );
 
     const data = await response.json();
-    console.log("[Warehouse Status Webhook] Search response:", JSON.stringify(data, null, 2));
+
+    // Check for GraphQL errors
+    if (data.errors) {
+      console.error("[Warehouse Status Webhook] GraphQL errors:", data.errors);
+      return null;
+    }
 
     const orders = data.data?.orders?.edges;
 
     if (!orders || orders.length === 0) {
-      console.log(`[Warehouse Status Webhook] No orders found with sale_order_id: ${saleOrderId}`);
+      console.log(`[Warehouse Status Webhook] ⚠️ No order found with sale_order_id: ${saleOrderId}`);
       return null;
     }
 
-    // Verify that the found order actually has the matching sale_order_id
-    for (const orderEdge of orders) {
-      const order = orderEdge.node;
-      const metafields = order.metafields?.edges || [];
+    // Get the first (and only) order
+    const order = orders[0].node;
+    const metafieldValue = order.metafield?.value;
 
-      console.log(`[Warehouse Status Webhook] Checking order ${order.name} (${order.id})`);
-      console.log(`[Warehouse Status Webhook] Metafields:`, JSON.stringify(metafields, null, 2));
-
-      // Find the sale_order_id metafield
-      const saleOrderIdMetafield = metafields.find(
-        (mf) => mf.node.key === "sale_order_id"
-      );
-
-      if (saleOrderIdMetafield) {
-        const foundSaleOrderId = saleOrderIdMetafield.node.value;
-        console.log(`[Warehouse Status Webhook] Order ${order.name} has sale_order_id: ${foundSaleOrderId}`);
-
-        // Verify exact match
-        if (foundSaleOrderId === saleOrderId) {
-          console.log(`[Warehouse Status Webhook] ✅ MATCH! Found order ${order.name} (${order.id})`);
-          return order.id;
-        } else {
-          console.log(`[Warehouse Status Webhook] ❌ MISMATCH! Expected ${saleOrderId}, got ${foundSaleOrderId}`);
-        }
-      } else {
-        console.log(`[Warehouse Status Webhook] Order ${order.name} has no sale_order_id metafield`);
-      }
+    // Verify exact match
+    if (metafieldValue === saleOrderId) {
+      console.log(`[Warehouse Status Webhook] ✅ Found order ${order.name} (${order.id})`);
+      return order.id;
+    } else {
+      console.warn(`[Warehouse Status Webhook] ⚠️ Metafield mismatch - Expected: ${saleOrderId}, Got: ${metafieldValue}`);
+      return null;
     }
-
-    console.log(`[Warehouse Status Webhook] No exact match found for sale_order_id: ${saleOrderId}`);
-    return null;
   } catch (error) {
     console.error("[Warehouse Status Webhook] Error finding order:", error);
     return null;
