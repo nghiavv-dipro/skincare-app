@@ -9,11 +9,6 @@ export async function action({ request }) {
 
     console.log(`[Webhook] Received ${topic} webhook from ${shop}`);
 
-    // Validate it's an orders/create webhook
-    if (topic !== "ORDERS_CREATE") {
-      return json({ error: "Invalid webhook topic" }, { status: 400 });
-    }
-
     const orderId = payload.id?.toString();
     console.log(`[Webhook] Processing order #${payload.name} (ID: ${orderId})`);
 
