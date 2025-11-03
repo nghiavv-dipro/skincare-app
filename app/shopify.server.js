@@ -70,9 +70,10 @@ const shopify = shopifyApp({
     },
   },
   hooks: {
-    afterAuth: async ({session}) => {
-    shopify.registerWebhooks({session});
-  },
+      afterAuth: async ({session}) => {
+      shopify.registerWebhooks({session});
+    },
+   },
   distribution: AppDistribution.AppStore,
   future: {
     unstable_newEmbeddedAuthStrategy: true,
