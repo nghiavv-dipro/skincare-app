@@ -326,7 +326,7 @@ function formatOrderForWarehouse(shopifyOrder) {
  * Lấy tracking number từ carrier API
  * @param {Object} admin - Shopify admin API client
  * @param {string} orderId - Shopify Order ID (numeric)
- * @returns {Promise<{success: boolean, trackingNumber: string, trackingUrl?: string, error?: string}>}
+ * @returns {Promise<{success: boolean, trackingNumber: string,  deliveryStatus: string,, trackingUrl?: string, error?: string}>}
  */
 export async function getTrackingNumber(admin, orderId) {
   try {
@@ -351,8 +351,6 @@ export async function getTrackingNumber(admin, orderId) {
 
     // Format order data to match warehouse API requirements
     const warehouseOrderData = formatOrderForWarehouse(shopifyOrder);
-    console.log('warehouseOrderData ---');
-    console.log(warehouseOrderData);
     console.log(`[Carrier API] Sending order data to warehouse API:`, JSON.stringify(warehouseOrderData, null, 2));
 
     // Call warehouse API to create sale order and get tracking number
@@ -365,9 +363,6 @@ export async function getTrackingNumber(admin, orderId) {
       },
       body: JSON.stringify(warehouseOrderData),
     });
-
-    console.log('response -----');
-    console.log(response);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -407,6 +402,7 @@ export async function getTrackingNumber(admin, orderId) {
 
     return {
       success: true,
+      error: false,
       trackingNumber: data.id,
       deliveryStatus: data.status_id,
     };
