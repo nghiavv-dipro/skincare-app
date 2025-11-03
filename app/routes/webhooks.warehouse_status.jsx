@@ -155,7 +155,7 @@ async function findOrderBySaleOrderId(admin, saleOrderId) {
     const response = await admin.graphql(
       `#graphql
         query findOrderBySaleOrderId($query: String!) {
-          orders(first: 1, query: $query) {
+          orders(first: 10, query: $query) {
             edges {
               node {
                 id
@@ -180,14 +180,45 @@ async function findOrderBySaleOrderId(admin, saleOrderId) {
     );
 
     const data = await response.json();
+    console.log("[Warehouse Status Webhook] Search response:", JSON.stringify(data, null, 2));
+
     const orders = data.data?.orders?.edges;
 
-    if (orders && orders.length > 0) {
-      const orderId = orders[0].node.id;
-      console.log(`[Warehouse Status Webhook] Found order ${orders[0].node.name} (${orderId})`);
-      return orderId;
+    if (!orders || orders.length === 0) {
+      console.log(`[Warehouse Status Webhook] No orders found with sale_order_id: ${saleOrderId}`);
+      return null;
     }
 
+    // Verify that the found order actually has the matching sale_order_id
+    for (const orderEdge of orders) {
+      const order = orderEdge.node;
+      const metafields = order.metafields?.edges || [];
+
+      console.log(`[Warehouse Status Webhook] Checking order ${order.name} (${order.id})`);
+      console.log(`[Warehouse Status Webhook] Metafields:`, JSON.stringify(metafields, null, 2));
+
+      // Find the sale_order_id metafield
+      const saleOrderIdMetafield = metafields.find(
+        (mf) => mf.node.key === "sale_order_id"
+      );
+
+      if (saleOrderIdMetafield) {
+        const foundSaleOrderId = saleOrderIdMetafield.node.value;
+        console.log(`[Warehouse Status Webhook] Order ${order.name} has sale_order_id: ${foundSaleOrderId}`);
+
+        // Verify exact match
+        if (foundSaleOrderId === saleOrderId) {
+          console.log(`[Warehouse Status Webhook] ✅ MATCH! Found order ${order.name} (${order.id})`);
+          return order.id;
+        } else {
+          console.log(`[Warehouse Status Webhook] ❌ MISMATCH! Expected ${saleOrderId}, got ${foundSaleOrderId}`);
+        }
+      } else {
+        console.log(`[Warehouse Status Webhook] Order ${order.name} has no sale_order_id metafield`);
+      }
+    }
+
+    console.log(`[Warehouse Status Webhook] No exact match found for sale_order_id: ${saleOrderId}`);
     return null;
   } catch (error) {
     console.error("[Warehouse Status Webhook] Error finding order:", error);
@@ -244,14 +275,25 @@ async function updateOrderDeliveryStatus(admin, orderId, deliveryStatus) {
     );
 
     const data = await response.json();
+
+    // Log full response for debugging
+    console.log("[Warehouse Status Webhook] GraphQL Response:", JSON.stringify(data, null, 2));
+
     const errors = data.data?.orderUpdate?.userErrors;
 
     if (errors && errors.length > 0) {
-      console.error("[Warehouse Status Webhook] Error updating metafield:", errors);
+      console.error("[Warehouse Status Webhook] Error updating metafield:", JSON.stringify(errors, null, 2));
+      return false;
+    }
+
+    // Check if order was actually updated
+    if (!data.data?.orderUpdate?.order) {
+      console.error("[Warehouse Status Webhook] Order update returned no data");
       return false;
     }
 
     console.log(`[Warehouse Status Webhook] Successfully updated delivery_status metafield for order ${orderId}`);
+    console.log("[Warehouse Status Webhook] Updated metafields:", JSON.stringify(data.data.orderUpdate.order.metafields, null, 2));
     return true;
   } catch (error) {
     console.error("[Warehouse Status Webhook] Error updating order:", error);
