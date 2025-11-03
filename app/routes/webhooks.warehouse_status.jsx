@@ -45,16 +45,50 @@ export async function action({ request }) {
       return json({ error: "Unauthorized - Missing Authorization header" }, { status: 401 });
     }
 
-    // Expected format: "Bearer Token <token>"
-    const tokenMatch = authHeader.match(/^Bearer Token (.+)$/);
-    if (!tokenMatch) {
-      console.error("[Warehouse Status Webhook] Invalid Authorization header format");
+    // Log the actual header received for debugging
+    console.log("[Warehouse Status Webhook] Received Authorization header:", authHeader);
+
+    // Support multiple authorization formats
+    let receivedToken = null;
+
+    // Format 1: "Bearer Token <token>"
+    let tokenMatch = authHeader.match(/^Bearer Token (.+)$/);
+    if (tokenMatch) {
+      receivedToken = tokenMatch[1];
+      console.log("[Warehouse Status Webhook] Format: Bearer Token");
+    }
+
+    // Format 2: "Bearer <token>" (standard OAuth format)
+    if (!receivedToken) {
+      tokenMatch = authHeader.match(/^Bearer (.+)$/);
+      if (tokenMatch) {
+        receivedToken = tokenMatch[1];
+        console.log("[Warehouse Status Webhook] Format: Bearer");
+      }
+    }
+
+    // Format 3: "Token <token>"
+    if (!receivedToken) {
+      tokenMatch = authHeader.match(/^Token (.+)$/);
+      if (tokenMatch) {
+        receivedToken = tokenMatch[1];
+        console.log("[Warehouse Status Webhook] Format: Token");
+      }
+    }
+
+    // Format 4: Just the token itself
+    if (!receivedToken && authHeader && !authHeader.includes(' ')) {
+      receivedToken = authHeader;
+      console.log("[Warehouse Status Webhook] Format: Raw token");
+    }
+
+    if (!receivedToken) {
+      console.error("[Warehouse Status Webhook] Invalid Authorization header format:", authHeader);
       return json({ error: "Unauthorized - Invalid Authorization format" }, { status: 401 });
     }
 
-    const receivedToken = tokenMatch[1];
     if (receivedToken !== expectedToken) {
-      console.error("[Warehouse Status Webhook] Invalid token");
+      console.error("[Warehouse Status Webhook] Invalid token - Expected:", expectedToken, "Received:", receivedToken);
       return json({ error: "Unauthorized - Invalid token" }, { status: 401 });
     }
 
