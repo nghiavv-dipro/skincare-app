@@ -14,6 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Parse webhook payload
     const body = await request.text();
     const orderPayload = JSON.parse(body);
+    console.log(`📦 [${webhookId}] orderPayload:`, JSON.stringify(orderPayload, null, 2));
 
     console.log(
       `📦 [${webhookId}] Order received: ${orderPayload.name} (#${orderPayload.id})`,
