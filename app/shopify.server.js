@@ -8,7 +8,6 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 // Initialize cron jobs when server starts
 import { startCronJobs } from "./cron.server.js";
-import { DeliveryMethod } from "@shopify/shopify-api";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -18,37 +17,6 @@ const shopify = shopifyApp({
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
-  webhooks: {
-    path: "/webhooks",
-  },
-  auth: {
-    afterAuth: async ({ session, admin, redirect }) => {
-      try {
-        console.log('Registering webhooks for shop:', session.shop);
-        
-        const webhooksToRegister = [
-          {
-            path: "/webhooks/orders/create",
-            topic: "ORDERS_CREATE",
-          },
-        ];
-
-        const registration = await registerWebhooks({ session, webhooks: webhooksToRegister });
-        console.log("Webhook registration result:", registration);
-        
-        if (registration && registration.success) {
-          console.log('Webhooks registered successfully');
-        } else {
-          console.error('Webhook registration failed:', registration.result);
-        }
-
-      } catch (error) {
-        console.error('Error in afterAuth:', error);
-      }
-
-      return redirect("/app");
-    },
-  },
   distribution: AppDistribution.AppStore,
   future: {
     unstable_newEmbeddedAuthStrategy: true,
