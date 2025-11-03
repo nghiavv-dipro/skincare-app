@@ -4,6 +4,47 @@
  */
 
 /**
+ * Helper function to remove Vietnamese diacritics
+ * Chuyển đổi tiếng Việt có dấu sang không dấu để tránh lỗi khi gọi API vận chuyển
+ * @param {string} str - String cần chuyển đổi
+ * @returns {string}
+ */
+function removeVietnameseDiacritics(str) {
+  if (!str) return '';
+
+  const diacriticsMap = {
+    'à': 'a', 'á': 'a', 'ạ': 'a', 'ả': 'a', 'ã': 'a',
+    'â': 'a', 'ầ': 'a', 'ấ': 'a', 'ậ': 'a', 'ẩ': 'a', 'ẫ': 'a',
+    'ă': 'a', 'ằ': 'a', 'ắ': 'a', 'ặ': 'a', 'ẳ': 'a', 'ẵ': 'a',
+    'è': 'e', 'é': 'e', 'ẹ': 'e', 'ẻ': 'e', 'ẽ': 'e',
+    'ê': 'e', 'ề': 'e', 'ế': 'e', 'ệ': 'e', 'ể': 'e', 'ễ': 'e',
+    'ì': 'i', 'í': 'i', 'ị': 'i', 'ỉ': 'i', 'ĩ': 'i',
+    'ò': 'o', 'ó': 'o', 'ọ': 'o', 'ỏ': 'o', 'õ': 'o',
+    'ô': 'o', 'ồ': 'o', 'ố': 'o', 'ộ': 'o', 'ổ': 'o', 'ỗ': 'o',
+    'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ợ': 'o', 'ở': 'o', 'ỡ': 'o',
+    'ù': 'u', 'ú': 'u', 'ụ': 'u', 'ủ': 'u', 'ũ': 'u',
+    'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ự': 'u', 'ử': 'u', 'ữ': 'u',
+    'ỳ': 'y', 'ý': 'y', 'ỵ': 'y', 'ỷ': 'y', 'ỹ': 'y',
+    'đ': 'd',
+    'À': 'A', 'Á': 'A', 'Ạ': 'A', 'Ả': 'A', 'Ã': 'A',
+    'Â': 'A', 'Ầ': 'A', 'Ấ': 'A', 'Ậ': 'A', 'Ẩ': 'A', 'Ẫ': 'A',
+    'Ă': 'A', 'Ằ': 'A', 'Ắ': 'A', 'Ặ': 'A', 'Ẳ': 'A', 'Ẵ': 'A',
+    'È': 'E', 'É': 'E', 'Ẹ': 'E', 'Ẻ': 'E', 'Ẽ': 'E',
+    'Ê': 'E', 'Ề': 'E', 'Ế': 'E', 'Ệ': 'E', 'Ể': 'E', 'Ễ': 'E',
+    'Ì': 'I', 'Í': 'I', 'Ị': 'I', 'Ỉ': 'I', 'Ĩ': 'I',
+    'Ò': 'O', 'Ó': 'O', 'Ọ': 'O', 'Ỏ': 'O', 'Õ': 'O',
+    'Ô': 'O', 'Ồ': 'O', 'Ố': 'O', 'Ộ': 'O', 'Ổ': 'O', 'Ỗ': 'O',
+    'Ơ': 'O', 'Ờ': 'O', 'Ớ': 'O', 'Ợ': 'O', 'Ở': 'O', 'Ỡ': 'O',
+    'Ù': 'U', 'Ú': 'U', 'Ụ': 'U', 'Ủ': 'U', 'Ũ': 'U',
+    'Ư': 'U', 'Ừ': 'U', 'Ứ': 'U', 'Ự': 'U', 'Ử': 'U', 'Ữ': 'U',
+    'Ỳ': 'Y', 'Ý': 'Y', 'Ỵ': 'Y', 'Ỷ': 'Y', 'Ỹ': 'Y',
+    'Đ': 'D',
+  };
+
+  return str.split('').map(char => diacriticsMap[char] || char).join('');
+}
+
+/**
  * Tạo sale order ở warehouse
  * @param {Object} shopifyOrder - Order data từ Shopify
  * @param {Object} admin - Shopify admin API client
@@ -129,7 +170,7 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
     currency_id: shopifyOrder.currency || 'VND',
     items: items,
     shippingAddress: {
-      full_address: fullAddress,
+      full_address: removeVietnameseDiacritics(fullAddress), // Remove diacritics to avoid carrier API errors
       full_name: shippingAddress.name?.trim() || `${shopifyOrder.customer?.first_name || ''} ${shopifyOrder.customer?.last_name || ''}`.trim() || '',
       phone_number: shippingAddress.phone || shopifyOrder.customer?.phone || '',
       note: shopifyOrder.note || '',
@@ -313,7 +354,7 @@ function formatOrderForWarehouse(shopifyOrder) {
     currency_id: shopifyOrder.currencyCode || 'VND',
     items: items,
     shippingAddress: {
-      full_address: fullAddress,
+      full_address: removeVietnameseDiacritics(fullAddress), // Remove diacritics to avoid carrier API errors
       full_name: shippingAddress.name || `${shopifyOrder.customer?.firstName || ''} ${shopifyOrder.customer?.lastName || ''}`.trim(),
       phone_number: shippingAddress.phone || shopifyOrder.customer?.phone || '',
       note: shopifyOrder.note || '',
