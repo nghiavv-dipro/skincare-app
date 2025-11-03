@@ -24,8 +24,7 @@ const shopify = shopifyApp({
     HANDLERS: {
       "ORDERS_CREATE": {
         deliveryMethod: DeliveryMethod.Http,
-        callbackUrl: "/webhooks/orders_create",
-        callback: async (topic, shop, body, webhookId, apiVersion) => {
+        callback: async (shop, body) => {
           try {
             const payload = JSON.parse(body);
             const orderId = payload.id?.toString();
