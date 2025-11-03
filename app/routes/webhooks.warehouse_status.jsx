@@ -104,15 +104,16 @@ export async function action({ request }) {
       return json({ error: "Missing sale_order_id in payload" }, { status: 400 });
     }
 
-    if (!payload.changes?.attributes?.status_id) {
-      console.error("[Warehouse Status Webhook] Missing changes.attributes.status_id in payload");
+    const saleOrderId = payload.subject.id;
+
+    // Get status_id: prefer changes.attributes.status_id, fallback to subject.status_id
+    let newStatus = payload.changes?.attributes?.status_id || payload.subject?.status_id;
+
+    if (!newStatus) {
+      console.error("[Warehouse Status Webhook] Missing status_id in both changes.attributes and subject");
       return json({ error: "Missing status_id in payload" }, { status: 400 });
     }
 
-    const saleOrderId = payload.subject.id;
-    const newStatus = payload.changes.attributes.status_id;
-
-    console.log(`[Warehouse Status Webhook] Processing: sale_order_id=${saleOrderId}, new_status=${newStatus}`);
 
     // Get shop from database (assuming we have at least one session)
     // In a multi-shop app, you might need to track which shop owns which sale_order_id
