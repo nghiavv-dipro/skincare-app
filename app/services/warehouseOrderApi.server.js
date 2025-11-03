@@ -380,7 +380,7 @@ export async function getTrackingNumber(admin, orderId) {
       });
 
       // Parse error message nếu có
-      let apiErrorMessage = "Không thể tạo đơn hàng từ kho";
+      let apiErrorMessage = "Không thể tạo mã vận chuyển";
       try {
         const errorData = JSON.parse(errorText);
         if (errorData.message) {
