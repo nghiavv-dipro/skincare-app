@@ -108,7 +108,7 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
     items.push({
       sku: lineItem.sku,
       quantity: lineItem.quantity,
-      price: parseFloat(lineItem.price) * 100, // Convert to cents if needed
+      price: parseFloat(lineItem.price), // Price in VND
       tax_rate: 0, // Can calculate from line_item.tax_lines if needed
     });
   }
@@ -130,7 +130,7 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
     items: items,
     shippingAddress: {
       full_address: fullAddress,
-      full_name: shippingAddress.name || shopifyOrder.customer?.first_name + ' ' + shopifyOrder.customer?.last_name,
+      full_name: shippingAddress.name?.trim() || `${shopifyOrder.customer?.first_name || ''} ${shopifyOrder.customer?.last_name || ''}`.trim() || '',
       phone_number: shippingAddress.phone || shopifyOrder.customer?.phone || '',
       note: shopifyOrder.note || '',
       customer_pay: true, // Default: customer pays shipping
@@ -292,7 +292,7 @@ function formatOrderForWarehouse(shopifyOrder) {
     items.push({
       sku: lineItem.sku,
       quantity: lineItem.quantity,
-      price: parseFloat(lineItem.originalUnitPriceSet.shopMoney.amount) * 100, // Convert to cents
+      price: parseFloat(lineItem.originalUnitPriceSet.shopMoney.amount), // Price in VND
       tax_rate: 0,
     });
   }
@@ -310,7 +310,7 @@ function formatOrderForWarehouse(shopifyOrder) {
   return {
     warehouse_id: parseInt(process.env.WAREHOUSE_ID || '7'), // Default to 7 (Narita - JP)
     shop_id: process.env.WAREHOUSE_SHOP_ID,
-    currency_id: 'VND',
+    currency_id: shopifyOrder.currencyCode || 'VND',
     items: items,
     shippingAddress: {
       full_address: fullAddress,

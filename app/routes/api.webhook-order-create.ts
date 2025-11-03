@@ -1,37 +1,171 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { getTrackingNumber, updateOrderMetafields } from "../services/warehouseOrderApi.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const testId = `webhook_test_${Date.now()}`;
+  const webhookId = `webhook_${Date.now()}`;
   const timestamp = new Date().toISOString();
-  
-  console.log(`🧪 [${testId}] ===== WEBHOOK TEST ENDPOINT ACCESSED ===== ${timestamp}`);
-  console.log(`📋 [${testId}] Method: ${request.method}`);
-  console.log(`📋 [${testId}] URL: ${request.url}`);
-  console.log(`📋 [${testId}] Headers:`, Object.fromEntries(request.headers.entries()));
-  
+
+  console.log(
+    `📦 [${webhookId}] ===== ORDER CREATED WEBHOOK ===== ${timestamp}`,
+  );
+
   try {
+    // Parse webhook payload
     const body = await request.text();
-    console.log(`📦 [${testId}] Body length: ${body.length}`);
-    
-    if (body) {
-      const parsed = JSON.parse(body);
-      console.log(`📋 [${testId}] Body JSON: ${JSON.stringify(parsed)}`);
-      console.log(`📋 [${testId}] Body: ${parsed}`);
-      console.log(`📋 [${testId}] Parsed order ID: ${parsed.id}`);
+    const orderPayload = JSON.parse(body);
+
+    console.log(
+      `📦 [${webhookId}] Order received: ${orderPayload.name} (#${orderPayload.id})`,
+    );
+
+    // Format data for warehouse API
+    const shippingAddress = orderPayload.shipping_address;
+    const fullAddress = [
+      shippingAddress.address1,
+      shippingAddress.address2,
+      shippingAddress.city,
+      shippingAddress.province,
+      shippingAddress.country,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const items = orderPayload.line_items
+      .map((item: { sku: any; quantity: any; price: string }) => ({
+        sku: item.sku,
+        quantity: item.quantity,
+        price: parseFloat(item.price),
+        tax_rate: 0,
+      }))
+      .filter((item: { sku: any }) => item.sku); // Only items with SKU
+
+    const warehouseOrderData = {
+      warehouse_id: parseInt(process.env.WAREHOUSE_ID || "7"),
+      shop_id: process.env.WAREHOUSE_SHOP_ID,
+      currency_id: orderPayload.currency || "VND",
+      items: items,
+      shippingAddress: {
+        full_address: fullAddress,
+        full_name: shippingAddress.name || "",
+        phone_number: shippingAddress.phone || orderPayload.phone || "",
+        note: orderPayload.note || "",
+        customer_pay: true,
+      },
+    };
+
+    console.log(`📦 [${webhookId}] Calling warehouse API...`);
+
+    // Call warehouse API
+    const response = await fetch(
+      `${process.env.WAREHOUSE_API_URL}/sale-orders`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: process.env.WAREHOUSE_API_TOKEN
+            ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}`
+            : undefined,
+        },
+        body: JSON.stringify(warehouseOrderData),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [${webhookId}] Warehouse API error:`, errorText);
+      return json(
+        {
+          success: false,
+          error: "Failed to create warehouse order",
+        },
+        { status: 500 },
+      );
     }
-  } catch (e) {
-    console.log('error')
+
+    const warehouseResult = await response.json();
+    const trackingNumber = warehouseResult.id;
+    const deliveryStatus = warehouseResult.status_id;
+
+    console.log(
+      `✅ [${webhookId}] Tracking number: ${trackingNumber}, Status: ${deliveryStatus}`,
+    );
+
+    // Update order metafields
+    const { admin } = await authenticate.admin(request);
+    const orderId = orderPayload.admin_graphql_api_id;
+
+    const metafieldResponse = await admin.graphql(
+      `#graphql
+        mutation updateOrderMetafield($input: OrderInput!) {
+          orderUpdate(input: $input) {
+            order {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+      {
+        variables: {
+          input: {
+            id: orderId,
+            metafields: [
+              {
+                namespace: "custom",
+                key: "sale_order_id",
+                value: String(trackingNumber),
+                type: "single_line_text_field",
+              },
+              {
+                namespace: "custom",
+                key: "delivery_status",
+                value: String(deliveryStatus),
+                type: "single_line_text_field",
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    const metafieldData = await metafieldResponse.json();
+    const errors = metafieldData.data?.orderUpdate?.userErrors;
+
+    if (errors && errors.length > 0) {
+      console.error(`❌ [${webhookId}] Metafield update errors:`, errors);
+      return json(
+        {
+          success: false,
+          error: "Failed to update metafields",
+        },
+        { status: 500 },
+      );
+    }
+
+    console.log(`✅ [${webhookId}] Order metafields updated successfully`);
+
+    return json({
+      success: true,
+      message: "Order processed successfully",
+      trackingNumber: trackingNumber,
+      deliveryStatus: deliveryStatus,
+      webhookId: webhookId,
+      timestamp: timestamp,
+    });
+  } catch (error) {
+    console.error(`❌ [${webhookId}] Error:`, error);
+    return json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    );
   }
-  
-  return json({ 
-    success: true, 
-    message: "Webhook test endpoint reached",
-    timestamp: timestamp,
-    testId: testId
-  });
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -43,6 +177,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     message: "Webhook endpoint is accessible via GET",
     timestamp: new Date().toISOString(),
     testId: testId,
-    url: request.url
+    url: request.url,
   });
 };
