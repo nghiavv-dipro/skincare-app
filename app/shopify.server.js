@@ -6,6 +6,9 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+// Initialize cron jobs when server starts
+import { startCronJobs } from "./cron.server.js";
+import { DeliveryMethod } from "@shopify/shopify-api";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -15,6 +18,15 @@ const shopify = shopifyApp({
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
+  webhooks: {
+    DELIVERY_METHOD: DeliveryMethod.Http,
+    HANDLERS: {
+      "ORDERS_CREATE": {
+        deliveryMethod: DeliveryMethod.Http,
+        callbackUrl: "/webhooks/orders_create",
+      },
+    },
+  },
   distribution: AppDistribution.AppStore,
   future: {
     unstable_newEmbeddedAuthStrategy: true,
@@ -34,6 +46,4 @@ export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;
 
-// Initialize cron jobs when server starts
-import { startCronJobs } from "./cron.server.js";
 startCronJobs();
