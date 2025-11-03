@@ -13,14 +13,6 @@ export async function createWarehouseSaleOrder(shopifyOrder, admin) {
   try {
     console.log(`[Warehouse Order API] Creating sale order for Shopify order #${shopifyOrder.name}`);
 
-    // Check if USE_MOCK_WAREHOUSE_API is enabled
-    const useMock = process.env.USE_MOCK_WAREHOUSE_API === 'true';
-
-    if (useMock) {
-      console.log("[Warehouse Order API] Using mock mode - simulating sale order creation");
-      return createMockSaleOrder(shopifyOrder);
-    }
-
     // Validate config
     if (!process.env.WAREHOUSE_API_URL) {
       throw new Error("WAREHOUSE_API_URL not configured");
@@ -121,34 +113,6 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
 }
 
 /**
- * Mock function for testing without calling real API
- * @param {Object} shopifyOrder
- * @returns {Object}
- */
-function createMockSaleOrder(shopifyOrder) {
-  const mockSaleOrderId = `OR00700${String(Date.now()).slice(-6)}`;
-  const mockOutboundOrderId1 = `OBS0090${String(Date.now()).slice(-6)}`;
-  const mockOutboundOrderId2 = `OBT0070${String(Date.now()).slice(-6)}`;
-
-  console.log(`[Mock Warehouse Order API] Created mock sale order: ${mockSaleOrderId}`);
-
-  return {
-    success: true,
-    saleOrderId: mockSaleOrderId,
-    outboundOrderIds: [mockOutboundOrderId1, mockOutboundOrderId2],
-    warehouseOrderData: {
-      id: mockSaleOrderId,
-      shop_order_id: shopifyOrder.id,
-      status_id: "order-confirmed",
-      outbound_orders: [
-        { id: mockOutboundOrderId1 },
-        { id: mockOutboundOrderId2 },
-      ],
-    },
-  };
-}
-
-/**
  * Lấy delivery status từ carrier API
  * @param {string} trackingNumber - Tracking number từ carrier
  * @returns {Promise<{success: boolean, deliveryStatus: string, error?: string}>}
@@ -156,14 +120,6 @@ function createMockSaleOrder(shopifyOrder) {
 export async function getDeliveryStatus(trackingNumber) {
   try {
     console.log(`[Carrier API] Getting delivery status for tracking number: ${trackingNumber}`);
-
-    // Check if USE_MOCK_WAREHOUSE_API is enabled
-    const useMock = process.env.USE_MOCK_WAREHOUSE_API === 'true';
-
-    if (useMock) {
-      console.log("[Carrier API] Using mock mode - simulating delivery status fetch");
-      return getMockDeliveryStatus(trackingNumber);
-    }
 
     // Validate config
     if (!process.env.WAREHOUSE_API_URL) {
@@ -198,27 +154,6 @@ export async function getDeliveryStatus(trackingNumber) {
       error: error.message,
     };
   }
-}
-
-/**
- * Mock function for getting delivery status
- * @param {string} trackingNumber
- * @returns {Object}
- */
-function getMockDeliveryStatus(trackingNumber) {
-  const mockStatuses = ['pending', 'processing', 'shipped', 'in_transit', 'delivered'];
-  const randomStatus = mockStatuses[Math.floor(Math.random() * mockStatuses.length)];
-
-  console.log(`[Mock Carrier API] Mock delivery status for ${trackingNumber}: ${randomStatus}`);
-
-  return {
-    success: true,
-    deliveryStatus: randomStatus,
-    statusDetails: {
-      updated_at: new Date().toISOString(),
-      location: randomStatus === 'delivered' ? 'Destination' : 'In transit',
-    },
-  };
 }
 
 /**
@@ -344,14 +279,6 @@ export async function getTrackingNumber(admin, orderId) {
   try {
     console.log(`[Carrier API] Getting tracking number for order: ${orderId}`);
 
-    // Check if USE_MOCK_WAREHOUSE_API is enabled
-    const useMock = process.env.USE_MOCK_WAREHOUSE_API === 'true';
-
-    if (useMock) {
-      console.log("[Carrier API] Using mock mode - simulating tracking number fetch");
-      return getMockTrackingNumber(orderId);
-    }
-
     // Validate config
     if (!process.env.WAREHOUSE_API_URL) {
       throw new Error("WAREHOUSE_API_URL not configured");
@@ -410,25 +337,6 @@ export async function getTrackingNumber(admin, orderId) {
       error: error.message,
     };
   }
-}
-
-/**
- * Mock function for getting tracking number
-/**
- * Mock function for getting tracking number
- * @param {string} orderId
- * @returns {Object}
- */
-function getMockTrackingNumber(orderId) {
-  const mockTrackingNumber = `TRK${String(Date.now()).slice(-10)}`;
-
-  console.log(`[Mock Carrier API] Mock tracking number for order ${orderId}: ${mockTrackingNumber}`);
-
-  return {
-    success: true,
-    trackingNumber: mockTrackingNumber,
-    deliveryStatus: 'pending'
-  };
 }
 
 /**
