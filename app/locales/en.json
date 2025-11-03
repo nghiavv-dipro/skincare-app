@@ -80,6 +80,7 @@
   },
   "ordersList": {
     "title": "Orders List",
+    "totalOrders": "Total: {{count}} orders",
     "search": {
       "label": "Search orders",
       "placeholder": "Search by order ID, customer name, payment status...",

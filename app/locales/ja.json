@@ -80,6 +80,7 @@
   },
   "ordersList": {
     "title": "注文一覧",
+    "totalOrders": "合計: {{count}} 注文",
     "search": {
       "label": "注文を検索",
       "placeholder": "注文番号、顧客名、支払い状況で検索...",

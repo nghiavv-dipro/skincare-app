@@ -80,6 +80,7 @@
   },
   "ordersList": {
     "title": "Danh sách đơn hàng",
+    "totalOrders": "Tổng: {{count}} đơn hàng",
     "search": {
       "label": "Tìm kiếm đơn hàng",
       "placeholder": "Tìm theo mã đơn hàng, tên khách hàng, trạng thái thanh toán...",

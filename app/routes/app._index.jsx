@@ -36,7 +36,21 @@ export const loader = async ({ request }) => {
   const sortField = url.searchParams.get("sortField") || "order_date";
   const sortDirection = url.searchParams.get("sortDirection") || "descending";
 
-  // Query orders directly from Shopify API using session token
+  // First, get total count of orders
+  const countResponse = await admin.graphql(
+    `#graphql
+      query getOrdersCount {
+        ordersCount {
+          count
+        }
+      }`
+  );
+  const countData = await countResponse.json();
+  const totalOrders = countData.data?.ordersCount?.count || 0;
+
+  // Query orders with cursor-based pagination
+  // For simplicity, we fetch more than needed and slice client-side
+  // Better approach: use cursor pagination with pageInfo.endCursor
   const response = await admin.graphql(
     `#graphql
       query getOrders($first: Int!) {
@@ -93,7 +107,7 @@ export const loader = async ({ request }) => {
       }`,
     {
       variables: {
-        first: PAGE_SIZE * page, // Fetch enough for pagination
+        first: Math.min(PAGE_SIZE * page, 250), // Fetch enough for current page, max 250
       },
     }
   );
@@ -165,7 +179,9 @@ export const loader = async ({ request }) => {
   // Paginate the results
   const skip = (page - 1) * PAGE_SIZE;
   const orders = allOrders.slice(skip, skip + PAGE_SIZE);
-  const total = allOrders.length;
+
+  // Use actual total from search, or totalOrders if no search
+  const total = searchQuery ? allOrders.length : totalOrders;
 
   return json({
     orders,
@@ -180,7 +196,7 @@ export const loader = async ({ request }) => {
 
 export default function Index() {
   const { t, i18n } = useTranslation();
-  const { orders, page, pageCount, searchQuery, sortField, sortDirection } = useLoaderData();
+  const { orders, page, pageCount, total, searchQuery, sortField, sortDirection } = useLoaderData();
   const navigation = useNavigation();
   const isLoading = navigation.state === "loading";
   const submit = useSubmit();
@@ -261,7 +277,7 @@ export default function Index() {
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="300" blockAlign="end">
+                <InlineStack gap="300" blockAlign="end" align="space-between">
                   <div style={{ flex: 1 }}>
                     <TextField
                       value={searchValue}
@@ -277,6 +293,9 @@ export default function Index() {
                       }
                     />
                   </div>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {t("ordersList.totalOrders", { count: total })}
+                  </Text>
                 </InlineStack>
                 <BlockStack gap="400">
                 {isLoading ? (
