@@ -84,8 +84,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "Content-Type": "application/json",
     };
 
-    if (process.env.WAREHOUSE_API_TOKEN) {
-      headers.Authorization = `Bearer ${process.env.WAREHOUSE_API_TOKEN}`;
+    if (process.env.WAREHOUSE_WEBHOOK_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.WAREHOUSE_WEBHOOK_TOKEN}`;
     }
 
     const response = await fetch(
@@ -96,6 +96,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         body: JSON.stringify(warehouseOrderData),
       },
     );
+    console.log(`📦 [${webhookId}] response`);
+    console.log(response);
 
     if (!response.ok) {
       const errorText = await response.text();
