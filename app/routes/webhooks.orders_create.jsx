@@ -32,12 +32,8 @@ export async function action({ request }) {
           value: trackingResult.trackingNumber,
         },
         {
-          key: "tracking_url",
-          value: trackingResult.trackingUrl || "",
-        },
-        {
-          key: "carrier",
-          value: trackingResult.carrier || "",
+          key: "delivery_status",
+          value: trackingResult.deliveryStatus,
         },
       ]);
 

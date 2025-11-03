@@ -421,16 +421,13 @@ export async function getTrackingNumber(admin, orderId) {
  */
 function getMockTrackingNumber(orderId) {
   const mockTrackingNumber = `TRK${String(Date.now()).slice(-10)}`;
-  const mockCarriers = ['DHL', 'FedEx', 'UPS', 'USPS', 'EMS'];
-  const randomCarrier = mockCarriers[Math.floor(Math.random() * mockCarriers.length)];
 
   console.log(`[Mock Carrier API] Mock tracking number for order ${orderId}: ${mockTrackingNumber}`);
 
   return {
     success: true,
     trackingNumber: mockTrackingNumber,
-    trackingUrl: `https://tracking.example.com/${mockTrackingNumber}`,
-    carrier: randomCarrier,
+    deliveryStatus: 'pending'
   };
 }
 
