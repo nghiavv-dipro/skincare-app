@@ -1,12 +1,8 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import type { PrismaClient } from "@prisma/client";
-import { unauthenticated } from "../shopify.server";
 import { getTrackingNumber, updateOrderMetafields } from "../services/warehouseOrderApi.server";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = require("../db.server").default as any;
-const prisma = db as PrismaClient;
+import { unauthenticated } from "../shopify.server.js";
+import prisma from "../db.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const webhookId = `webhook_${Date.now()}`;
@@ -21,25 +17,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     console.log(`📦 [${webhookId}] Order received: ${payload.name} (#${payload.id})`);
 
-    // Get shop from database (assuming we have at least one session)
-    const sessionRecord = await prisma.session.findFirst({
+    // Get the first available shop session
+    const session = await prisma.session.findFirst({
       where: {
         isOnline: false,
       },
       orderBy: {
-        id: 'desc',
+        id: "desc",
       },
     });
 
-    if (!sessionRecord) {
-      console.error(`❌ [${webhookId}] No active shop session found`);
-      return json({ error: "No active shop session" }, { status: 500 });
+    if (!session) {
+      console.error("[Cron] ❌ No active shop session found");
+      return;
     }
 
-    const shop = sessionRecord.shop;
-    console.log(`📦 [${webhookId}] Using shop: ${shop}`);
-
-    // Get admin API client for the shop using unauthenticated access
+    const shop = session.shop;
+    // Get admin API client
     const { admin } = await unauthenticated.admin(shop);
 
     const orderId = payload.id; // Numeric order ID
