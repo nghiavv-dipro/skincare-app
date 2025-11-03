@@ -20,7 +20,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
 
     // Format data for warehouse API
-    const shippingAddress = orderPayload.shipping_address;
+    // Use shipping_address, fallback to billing_address or customer.default_address
+    const shippingAddress =
+      orderPayload.shipping_address ||
+      orderPayload.billing_address ||
+      orderPayload.customer?.default_address;
+
+    if (!shippingAddress) {
+      console.error(`❌ [${webhookId}] No shipping/billing address found`);
+      return json({
+        success: false,
+        error: "No shipping or billing address found for this order"
+      }, { status: 400 });
+    }
+
     const fullAddress = [
       shippingAddress.address1,
       shippingAddress.address2,
@@ -39,6 +52,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         tax_rate: 0,
       }))
       .filter((item: { sku: any }) => item.sku); // Only items with SKU
+
+    if (items.length === 0) {
+      console.error(`❌ [${webhookId}] No items with SKU found`);
+      return json({
+        success: false,
+        error: "No items with SKU found in this order"
+      }, { status: 400 });
+    }
 
     const warehouseOrderData = {
       warehouse_id: parseInt(process.env.WAREHOUSE_ID || "7"),
