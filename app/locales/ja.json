@@ -106,7 +106,8 @@
     "pagination": {
       "previous": "前へ",
       "next": "次へ",
-      "page": "ページ {{current}} / {{total}}"
+      "page": "ページ {{current}} / {{total}}",
+      "showing": "{{count}}件の注文を表示中"
     }
   }
 }

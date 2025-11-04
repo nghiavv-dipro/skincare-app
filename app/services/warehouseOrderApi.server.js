@@ -1,7 +1,10 @@
 /**
- * Warehouse Order API Service
+ * Warehouse Order API Service (Improved with Retry Logic & Structured Logging)
  * Tạo sale order (mã xuất kho) ở warehouse khi có order mới từ Shopify
  */
+
+import { fetchWithRetry, warehouseRetryOptions } from '../utils/retry.server.js';
+import { warehouseLogger, logOrderProcessing, logError } from '../utils/logger.server.js';
 
 /**
  * Helper function to remove Vietnamese diacritics
@@ -51,8 +54,10 @@ function removeVietnameseDiacritics(str) {
  * @returns {Promise<{success: boolean, saleOrderId: string, outboundOrderIds: Array, error?: string}>}
  */
 export async function createWarehouseSaleOrder(shopifyOrder, admin) {
+  const startTime = Date.now();
+
   try {
-    console.log(`[Warehouse Order API] Creating sale order for Shopify order #${shopifyOrder.name}`);
+    warehouseLogger.info(`Creating sale order for Shopify order ${shopifyOrder.name}`);
 
     // Validate config
     if (!process.env.WAREHOUSE_API_URL) {
@@ -66,51 +71,35 @@ export async function createWarehouseSaleOrder(shopifyOrder, admin) {
     // Transform Shopify order to warehouse format
     const warehouseOrderData = await transformShopifyOrderToWarehouse(shopifyOrder, admin);
 
-    // Call warehouse API
-    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/sale-orders`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
+    // Call warehouse API with retry logic
+    const response = await fetchWithRetry(
+      `${process.env.WAREHOUSE_API_URL}/sale-orders`,
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
+        },
+        body: JSON.stringify(warehouseOrderData),
+        timeout: 30000,
       },
-      body: JSON.stringify(warehouseOrderData),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-
-      // Log chi tiết lỗi API để debug
-      console.error("[Warehouse Order API] ❌ Warehouse API error:", {
-        status: response.status,
-        statusText: response.statusText,
-        shopifyOrder: shopifyOrder.name,
-        responseBody: errorText,
-      });
-
-      // Parse error message nếu có
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.message) {
-          console.error("[Warehouse Order API] API error message:", errorData.message);
-        }
-        if (errorData.errors) {
-          console.error("[Warehouse Order API] API validation errors:", errorData.errors);
-        }
-      } catch (parseError) {
-        console.error("[Warehouse Order API] Raw error:", errorText);
-      }
-
-      // Return generic error message
-      return {
-        success: false,
-        error: "Không thể lấy mã vận chuyển, vui lòng thử lại",
-      };
-    }
+      warehouseRetryOptions
+    );
 
     const data = await response.json();
+    const duration = Date.now() - startTime;
 
-    console.log(`[Warehouse Order API] ✅ Created sale order: ${data.id}`);
+    warehouseLogger.info(`Sale order created successfully`, {
+      saleOrderId: data.id,
+      shopifyOrder: shopifyOrder.name,
+      duration: `${duration}ms`,
+    });
+
+    logOrderProcessing(shopifyOrder.name, 'createWarehouseOrder', 'success', {
+      saleOrderId: data.id,
+      duration: `${duration}ms`,
+    });
 
     return {
       success: true,
@@ -119,12 +108,22 @@ export async function createWarehouseSaleOrder(shopifyOrder, admin) {
       warehouseOrderData: data,
     };
   } catch (error) {
-    console.error("[Warehouse Order API] ❌ Error creating sale order:", error);
+    const duration = Date.now() - startTime;
 
-    // Return generic error message
+    logError('WarehouseOrderAPI', error, {
+      shopifyOrder: shopifyOrder.name,
+      duration: `${duration}ms`,
+      action: 'createWarehouseSaleOrder',
+    });
+
+    logOrderProcessing(shopifyOrder.name, 'createWarehouseOrder', 'failed', {
+      error: error.message,
+      duration: `${duration}ms`,
+    });
+
     return {
       success: false,
-      error: "Không thể lấy mã vận chuyển, vui lòng thử lại",
+      error: "Không thể tạo đơn hàng kho, vui lòng thử lại",
     };
   }
 }
@@ -142,15 +141,15 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
   for (const lineItem of shopifyOrder.line_items) {
     // Skip nếu không có SKU
     if (!lineItem.sku) {
-      console.warn(`[Warehouse Order API] Line item ${lineItem.title} has no SKU, skipping`);
+      warehouseLogger.warn(`Line item ${lineItem.title} has no SKU, skipping`);
       continue;
     }
 
     items.push({
       sku: lineItem.sku,
       quantity: lineItem.quantity,
-      price: parseFloat(lineItem.price), // Price in VND
-      tax_rate: 0, // Can calculate from line_item.tax_lines if needed
+      price: parseFloat(lineItem.price),
+      tax_rate: 0,
     });
   }
 
@@ -165,16 +164,16 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
   ].filter(Boolean).join(', ');
 
   const warehouseOrderData = {
-    warehouse_id: parseInt(process.env.WAREHOUSE_ID || '7'), // Default to 7 (Narita - JP)
+    warehouse_id: parseInt(process.env.WAREHOUSE_ID || '7'),
     shop_id: process.env.WAREHOUSE_SHOP_ID,
     currency_id: shopifyOrder.currency || 'VND',
     items: items,
     shippingAddress: {
-      full_address: removeVietnameseDiacritics(fullAddress), // Remove diacritics to avoid carrier API errors
+      full_address: removeVietnameseDiacritics(fullAddress),
       full_name: shippingAddress.name?.trim() || `${shopifyOrder.customer?.first_name || ''} ${shopifyOrder.customer?.last_name || ''}`.trim() || '',
       phone_number: shippingAddress.phone || shopifyOrder.customer?.phone || '',
       note: shopifyOrder.note || '',
-      customer_pay: true, // Default: customer pays shipping
+      customer_pay: true,
     },
   };
 
@@ -187,62 +186,50 @@ async function transformShopifyOrderToWarehouse(shopifyOrder, admin) {
  * @returns {Promise<{success: boolean, deliveryStatus: string, error?: string}>}
  */
 export async function getDeliveryStatus(trackingNumber) {
-  try {
-    console.log(`[Carrier API] Getting delivery status for tracking number: ${trackingNumber}`);
+  const startTime = Date.now();
 
-    // Validate config
+  try {
+    warehouseLogger.info(`Getting delivery status for tracking: ${trackingNumber}`);
+
     if (!process.env.WAREHOUSE_API_URL) {
       throw new Error("WAREHOUSE_API_URL not configured");
     }
 
-    // Call carrier API to get delivery status
-    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/sale-orders/${trackingNumber}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
+    // Call carrier API with retry
+    const response = await fetchWithRetry(
+      `${process.env.WAREHOUSE_API_URL}/sale-orders/${trackingNumber}`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
+        },
+        timeout: 15000,
       },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-
-      // Log chi tiết lỗi API để debug
-      console.error("[Carrier API] ❌ Warehouse API error:", {
-        status: response.status,
-        statusText: response.statusText,
-        trackingNumber: trackingNumber,
-        responseBody: errorText,
-      });
-
-      // Parse error message nếu có
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.message) {
-          console.error("[Carrier API] API error message:", errorData.message);
-        }
-      } catch (parseError) {
-        console.error("[Carrier API] Raw error:", errorText);
-      }
-
-      // Return generic error message
-      return {
-        success: false,
-        error: "Không thể lấy trạng thái vận đơn",
-      };
-    }
+      warehouseRetryOptions
+    );
 
     const data = await response.json();
+    const duration = Date.now() - startTime;
 
-    console.log(`[Carrier API] ✅ Got delivery status: ${data.delivery_status}`);
+    warehouseLogger.info(`Delivery status retrieved`, {
+      trackingNumber,
+      status: data.status_id,
+      duration: `${duration}ms`,
+    });
 
     return {
       success: true,
       deliveryStatus: data.status_id,
     };
   } catch (error) {
-    console.error("[Carrier API] ❌ Error getting delivery status:", error);
+    const duration = Date.now() - startTime;
 
-    // Return generic error message
+    logError('WarehouseOrderAPI', error, {
+      trackingNumber,
+      duration: `${duration}ms`,
+      action: 'getDeliveryStatus',
+    });
+
     return {
       success: false,
       error: "Không thể lấy trạng thái vận đơn",
@@ -307,7 +294,10 @@ async function fetchShopifyOrder(admin, shopifyOrderId) {
     const data = await response.json();
     return data.data?.order || null;
   } catch (error) {
-    console.error("[Warehouse Order API] Error fetching Shopify order:", error);
+    logError('WarehouseOrderAPI', error, {
+      shopifyOrderId,
+      action: 'fetchShopifyOrder',
+    });
     return null;
   }
 }
@@ -318,27 +308,24 @@ async function fetchShopifyOrder(admin, shopifyOrderId) {
  * @returns {Object}
  */
 function formatOrderForWarehouse(shopifyOrder) {
-  // Extract line items with SKU
   const items = [];
 
   for (const edge of shopifyOrder.lineItems.edges) {
     const lineItem = edge.node;
 
-    // Skip if no SKU
     if (!lineItem.sku) {
-      console.warn(`[Warehouse Order API] Line item ${lineItem.title} has no SKU, skipping`);
+      warehouseLogger.warn(`Line item ${lineItem.title} has no SKU, skipping`);
       continue;
     }
 
     items.push({
       sku: lineItem.sku,
       quantity: lineItem.quantity,
-      price: parseFloat(lineItem.originalUnitPriceSet.shopMoney.amount), // Price in VND
+      price: parseFloat(lineItem.originalUnitPriceSet.shopMoney.amount),
       tax_rate: 0,
     });
   }
 
-  // Build shipping address
   const shippingAddress = shopifyOrder.shippingAddress;
   const fullAddress = [
     shippingAddress.address1,
@@ -349,16 +336,16 @@ function formatOrderForWarehouse(shopifyOrder) {
   ].filter(Boolean).join(', ');
 
   return {
-    warehouse_id: parseInt(process.env.WAREHOUSE_ID || '7'), // Default to 7 (Narita - JP)
+    warehouse_id: parseInt(process.env.WAREHOUSE_ID || '7'),
     shop_id: process.env.WAREHOUSE_SHOP_ID,
     currency_id: shopifyOrder.currencyCode || 'VND',
     items: items,
     shippingAddress: {
-      full_address: removeVietnameseDiacritics(fullAddress), // Remove diacritics to avoid carrier API errors
+      full_address: removeVietnameseDiacritics(fullAddress),
       full_name: shippingAddress.name || `${shopifyOrder.customer?.firstName || ''} ${shopifyOrder.customer?.lastName || ''}`.trim(),
       phone_number: shippingAddress.phone || shopifyOrder.customer?.phone || '',
       note: shopifyOrder.note || '',
-      customer_pay: true, // Default: customer pays shipping
+      customer_pay: true,
     },
   };
 }
@@ -367,13 +354,14 @@ function formatOrderForWarehouse(shopifyOrder) {
  * Lấy tracking number từ carrier API
  * @param {Object} admin - Shopify admin API client
  * @param {string} orderId - Shopify Order ID (numeric)
- * @returns {Promise<{success: boolean, trackingNumber: string,  deliveryStatus: string,, trackingUrl?: string, error?: string}>}
+ * @returns {Promise<{success: boolean, trackingNumber: string, deliveryStatus: string, error?: string}>}
  */
 export async function getTrackingNumber(admin, orderId) {
-  try {
-    console.log(`[Carrier API] Getting tracking number for order: ${orderId}`);
+  const startTime = Date.now();
 
-    // Validate config
+  try {
+    warehouseLogger.info(`Getting tracking number for order: ${orderId}`);
+
     if (!process.env.WAREHOUSE_API_URL) {
       throw new Error("WAREHOUSE_API_URL not configured");
     }
@@ -390,67 +378,59 @@ export async function getTrackingNumber(admin, orderId) {
       throw new Error(`Order ${orderId} not found in Shopify`);
     }
 
-    // Format order data to match warehouse API requirements
+    // Format order data
     const warehouseOrderData = formatOrderForWarehouse(shopifyOrder);
-    console.log(`[Carrier API] Sending order data to warehouse API:`, JSON.stringify(warehouseOrderData, null, 2));
 
-    // Call warehouse API to create sale order and get tracking number
-    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/sale-orders`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
-      },
-      body: JSON.stringify(warehouseOrderData),
+    warehouseLogger.debug(`Sending order data to warehouse`, {
+      orderId,
+      itemsCount: warehouseOrderData.items.length,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-
-      // Log chi tiết lỗi API để debug
-      console.error("[Carrier API] ❌ Warehouse API error:", {
-        status: response.status,
-        statusText: response.statusText,
-        responseBody: errorText,
-      });
-
-      // Parse error message nếu có
-      let apiErrorMessage = "Không thể tạo mã vận chuyển";
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.message) {
-          console.error("[Carrier API] API error message:", errorData.message);
-        }
-        if (errorData.errors) {
-          console.error("[Carrier API] API validation errors:", errorData.errors);
-        }
-      } catch (parseError) {
-        // Không parse được JSON, dùng raw text
-        console.error("[Carrier API] Raw error:", errorText);
-      }
-
-      // Return generic error message (không expose API details)
-      return {
-        success: false,
-        error: apiErrorMessage,
-      };
-    }
+    // Call warehouse API with retry
+    const response = await fetchWithRetry(
+      `${process.env.WAREHOUSE_API_URL}/sale-orders`,
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
+        },
+        body: JSON.stringify(warehouseOrderData),
+        timeout: 30000,
+      },
+      warehouseRetryOptions
+    );
 
     const data = await response.json();
+    const duration = Date.now() - startTime;
 
-    console.log(`[Carrier API] ✅ Got tracking number: ${data.id}`);
+    warehouseLogger.info(`Tracking number retrieved`, {
+      orderId,
+      trackingNumber: data.id,
+      deliveryStatus: data.status_id,
+      duration: `${duration}ms`,
+    });
+
+    logOrderProcessing(orderId, 'getTrackingNumber', 'success', {
+      trackingNumber: data.id,
+      duration: `${duration}ms`,
+    });
 
     return {
       success: true,
-      error: false,
       trackingNumber: data.id,
       deliveryStatus: data.status_id,
     };
   } catch (error) {
-    console.error("[Carrier API] ❌ Error getting tracking number:", error);
+    const duration = Date.now() - startTime;
 
-    // Return generic error message
+    logError('WarehouseOrderAPI', error, {
+      orderId,
+      duration: `${duration}ms`,
+      action: 'getTrackingNumber',
+    });
+
     return {
       success: false,
       error: "Không thể lấy mã vận đơn từ kho",
@@ -510,14 +490,17 @@ export async function saveWarehouseOrderToShopify(admin, orderId, warehouseData)
     const errors = data.data?.orderUpdate?.userErrors;
 
     if (errors && errors.length > 0) {
-      console.error("[Warehouse Order API] Error saving metafields:", errors);
+      warehouseLogger.error('Error saving metafields', { orderId, errors });
       return false;
     }
 
-    console.log(`[Warehouse Order API] Saved warehouse order info to Shopify order ${orderId}`);
+    warehouseLogger.info(`Saved warehouse order info to Shopify`, { orderId });
     return true;
   } catch (error) {
-    console.error("[Warehouse Order API] Error saving to Shopify:", error);
+    logError('WarehouseOrderAPI', error, {
+      orderId,
+      action: 'saveWarehouseOrderToShopify',
+    });
     return false;
   }
 }
@@ -572,14 +555,17 @@ export async function updateOrderMetafields(admin, orderId, metafields) {
     const errors = data.data?.orderUpdate?.userErrors;
 
     if (errors && errors.length > 0) {
-      console.error("[Warehouse Order API] Error updating metafields:", errors);
+      warehouseLogger.error('Error updating metafields', { orderId, errors });
       return false;
     }
 
-    console.log(`[Warehouse Order API] Updated metafields for Shopify order ${orderId}`);
+    warehouseLogger.info(`Updated metafields for order`, { orderId });
     return true;
   } catch (error) {
-    console.error("[Warehouse Order API] Error updating metafields:", error);
+    logError('WarehouseOrderAPI', error, {
+      orderId,
+      action: 'updateOrderMetafields',
+    });
     return false;
   }
 }
