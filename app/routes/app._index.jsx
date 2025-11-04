@@ -20,183 +20,163 @@ import { useTranslation } from "react-i18next";
 import { authenticate } from "../shopify.server";
 import { useState, useCallback } from "react";
 import { ClientOnly } from "../components/ClientOnly";
+import {
+  buildPaginationVariables,
+  mapSortField,
+  buildSearchQuery,
+  buildPaginationUrl,
+} from "../utils/pagination.server";
+import { shopifyLogger } from "../utils/logger.server";
 
 export const loader = async ({ request }) => {
-  // Authenticate and get admin API client using session token
-  const { admin } = await authenticate.admin(request);
+  const startTime = Date.now();
 
-  const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get("page") || "1", 10);
-  const PAGE_SIZE = 10;
+  try {
+    // Authenticate and get admin API client using session token
+    const { admin } = await authenticate.admin(request);
 
-  // Get search query parameter
-  const searchQuery = url.searchParams.get("search") || "";
+    const url = new URL(request.url);
+    const cursor = url.searchParams.get("cursor") || null;
+    const direction = url.searchParams.get("direction") || "next";
+    const PAGE_SIZE = 50;
 
-  // Get sort parameters
-  const sortField = url.searchParams.get("sortField") || "order_date";
-  const sortDirection = url.searchParams.get("sortDirection") || "descending";
+    // Get search query parameter
+    const searchQuery = url.searchParams.get("search") || "";
 
-  // First, get total count of orders
-  const countResponse = await admin.graphql(
-    `#graphql
-      query getOrdersCount {
-        ordersCount {
-          count
-        }
-      }`
-  );
-  const countData = await countResponse.json();
-  const totalOrders = countData.data?.ordersCount?.count || 0;
+    // Get sort parameters
+    const sortField = url.searchParams.get("sortField") || "order_date";
+    const sortDirection = url.searchParams.get("sortDirection") || "descending";
 
-  // Query orders with cursor-based pagination
-  // For simplicity, we fetch more than needed and slice client-side
-  // Better approach: use cursor pagination with pageInfo.endCursor
-  const response = await admin.graphql(
-    `#graphql
-      query getOrders($first: Int!) {
-        orders(first: $first, sortKey: CREATED_AT, reverse: true) {
-          edges {
-            node {
-              id
-              name
-              createdAt
-              customer {
-                displayName
-              }
-              totalPriceSet {
-                shopMoney {
-                  amount
-                  currencyCode
+    // Map to Shopify sort key
+    const shopifySortKey = mapSortField(sortField);
+    const reverse = sortDirection === "descending";
+
+    // Build search query
+    const queryString = buildSearchQuery(searchQuery);
+
+    // Build pagination variables
+    const paginationVars = buildPaginationVariables({
+      cursor,
+      direction,
+      pageSize: PAGE_SIZE,
+    });
+
+    shopifyLogger.info('Loading orders list', {
+      cursor,
+      direction,
+      searchQuery,
+      sortField: shopifySortKey,
+      reverse,
+    });
+
+    // Query orders with proper cursor-based pagination
+    const response = await admin.graphql(
+      `#graphql
+        query getOrders($first: Int, $last: Int, $after: String, $before: String, $query: String, $sortKey: OrderSortKeys, $reverse: Boolean) {
+          orders(first: $first, last: $last, after: $after, before: $before, query: $query, sortKey: $sortKey, reverse: $reverse) {
+            edges {
+              cursor
+              node {
+                id
+                name
+                createdAt
+                customer {
+                  displayName
                 }
-              }
-              displayFinancialStatus
-              displayFulfillmentStatus
-              channelInformation {
-                channelDefinition {
-                  channelName
-                }
-              }
-              lineItems(first: 1) {
-                edges {
-                  node {
-                    id
+                totalPriceSet {
+                  shopMoney {
+                    amount
+                    currencyCode
                   }
                 }
-              }
-              lineItemsCount: lineItems(first: 250) {
-                edges {
-                  node {
-                    id
+                displayFinancialStatus
+                displayFulfillmentStatus
+                channelInformation {
+                  channelDefinition {
+                    channelName
                   }
                 }
-              }
-              tags
-              deliveryStatus: metafield(namespace: "custom", key: "delivery_status") {
-                value
-              }
-              saleOrderId: metafield(namespace: "custom", key: "sale_order_id") {
-                value
+                lineItems(first: 250) {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
+                tags
+                deliveryStatus: metafield(namespace: "custom", key: "delivery_status") {
+                  value
+                }
+                saleOrderId: metafield(namespace: "custom", key: "sale_order_id") {
+                  value
+                }
               }
             }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+              startCursor
+              endCursor
+            }
           }
-          pageInfo {
-            hasNextPage
-            hasPreviousPage
-          }
-        }
-      }`,
-    {
-      variables: {
-        first: Math.min(PAGE_SIZE * page, 250), // Fetch enough for current page, max 250
-      },
-    }
-  );
+        }`,
+      {
+        variables: {
+          ...paginationVars,
+          query: queryString,
+          sortKey: shopifySortKey,
+          reverse: reverse,
+        },
+      }
+    );
 
-  const data = await response.json();
-  const ordersData = data.data.orders;
+    const data = await response.json();
+    const ordersData = data.data.orders;
 
-  // Map Shopify order data to match UI format
-  let allOrders = ordersData.edges.map((edge) => ({
-    id: edge.node.id.split('/').pop(), // Extract numeric ID
-    order_id: edge.node.name.replace('#', ''),
-    customer_name: edge.node.customer?.displayName || 'Guest',
-    total_price: parseFloat(edge.node.totalPriceSet.shopMoney.amount),
-    order_date: edge.node.createdAt,
-    financial_status: edge.node.displayFinancialStatus,
-    fulfillment_status: edge.node.displayFulfillmentStatus,
-    channel: edge.node.channelInformation?.channelDefinition?.channelName || 'Online Store',
-    items_count: edge.node.lineItemsCount.edges.length,
-    tags: edge.node.tags,
-    delivery_status: edge.node.deliveryStatus?.value || '',
-    sale_order_id: edge.node.saleOrderId?.value || '',
-  }));
+    // Map Shopify order data to match UI format
+    const orders = ordersData.edges.map((edge) => ({
+      id: edge.node.id.split('/').pop(),
+      order_id: edge.node.name.replace('#', ''),
+      customer_name: edge.node.customer?.displayName || 'Guest',
+      total_price: parseFloat(edge.node.totalPriceSet.shopMoney.amount),
+      order_date: edge.node.createdAt,
+      financial_status: edge.node.displayFinancialStatus,
+      fulfillment_status: edge.node.displayFulfillmentStatus,
+      channel: edge.node.channelInformation?.channelDefinition?.channelName || 'Online Store',
+      items_count: edge.node.lineItems.edges.length,
+      tags: edge.node.tags,
+      delivery_status: edge.node.deliveryStatus?.value || '',
+      sale_order_id: edge.node.saleOrderId?.value || '',
+      cursor: edge.cursor,
+    }));
 
-  // Apply search filtering
-  if (searchQuery) {
-    const query = searchQuery.toLowerCase();
-    allOrders = allOrders.filter((order) => {
-      return (
-        order.order_id.toLowerCase().includes(query) ||
-        order.customer_name.toLowerCase().includes(query) ||
-        order.financial_status.toLowerCase().includes(query)
-      );
+    const duration = Date.now() - startTime;
+    shopifyLogger.info('Orders loaded successfully', {
+      count: orders.length,
+      duration: `${duration}ms`,
     });
+
+    return json({
+      orders,
+      pageInfo: ordersData.pageInfo,
+      searchQuery,
+      sortField,
+      sortDirection,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    shopifyLogger.error('Error loading orders', {
+      error: error.message,
+      duration: `${duration}ms`,
+    });
+
+    throw error;
   }
-
-  // Apply sorting
-  allOrders.sort((a, b) => {
-    let aValue, bValue;
-
-    switch (sortField) {
-      case "order_id":
-        aValue = parseInt(a.order_id);
-        bValue = parseInt(b.order_id);
-        break;
-      case "order_date":
-        aValue = new Date(a.order_date).getTime();
-        bValue = new Date(b.order_date).getTime();
-        break;
-      case "total_price":
-        aValue = a.total_price;
-        bValue = b.total_price;
-        break;
-      case "items_count":
-        aValue = a.items_count;
-        bValue = b.items_count;
-        break;
-      default:
-        aValue = a.order_date;
-        bValue = b.order_date;
-    }
-
-    if (sortDirection === "ascending") {
-      return aValue > bValue ? 1 : -1;
-    } else {
-      return aValue < bValue ? 1 : -1;
-    }
-  });
-
-  // Paginate the results
-  const skip = (page - 1) * PAGE_SIZE;
-  const orders = allOrders.slice(skip, skip + PAGE_SIZE);
-
-  // Use actual total from search, or totalOrders if no search
-  const total = searchQuery ? allOrders.length : totalOrders;
-
-  return json({
-    orders,
-    page,
-    total,
-    pageCount: Math.ceil(total / PAGE_SIZE),
-    searchQuery,
-    sortField,
-    sortDirection,
-  });
 };
 
 export default function Index() {
   const { t, i18n } = useTranslation();
-  const { orders, page, pageCount, total, searchQuery, sortField, sortDirection } = useLoaderData();
+  const { orders, pageInfo, searchQuery, sortField, sortDirection } = useLoaderData();
   const navigation = useNavigation();
   const isLoading = navigation.state === "loading";
   const submit = useSubmit();
@@ -248,6 +228,7 @@ export default function Index() {
       if (searchQuery) {
         formData.append("search", searchQuery);
       }
+      // Reset to first page when sorting
       submit(formData, { method: "get" });
     }
   }, [searchQuery, submit]);
@@ -259,15 +240,40 @@ export default function Index() {
   const handleSearchSubmit = useCallback(() => {
     const formData = new FormData();
     formData.append("search", searchValue);
+    formData.append("sortField", sortField);
+    formData.append("sortDirection", sortDirection);
     submit(formData, { method: "get" });
-  }, [searchValue, submit]);
+  }, [searchValue, sortField, sortDirection, submit]);
 
   const handleSearchClear = useCallback(() => {
     setSearchValue("");
     const formData = new FormData();
     formData.append("search", "");
+    formData.append("sortField", sortField);
+    formData.append("sortDirection", sortDirection);
     submit(formData, { method: "get" });
-  }, [submit]);
+  }, [sortField, sortDirection, submit]);
+
+  // Build pagination URLs
+  const nextPageUrl = pageInfo.hasNextPage
+    ? buildPaginationUrl('/app', {
+        cursor: pageInfo.endCursor,
+        direction: 'next',
+        search: searchQuery,
+        sortField,
+        sortDirection,
+      })
+    : null;
+
+  const previousPageUrl = pageInfo.hasPreviousPage
+    ? buildPaginationUrl('/app', {
+        cursor: pageInfo.startCursor,
+        direction: 'previous',
+        search: searchQuery,
+        sortField,
+        sortDirection,
+      })
+    : null;
 
   return (
     <Page fullWidth>
@@ -294,7 +300,7 @@ export default function Index() {
                     />
                   </div>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    {t("ordersList.totalOrders", { count: total })}
+                    {t("ordersList.totalOrders", { count: orders.length })}
                   </Text>
                 </InlineStack>
                 <BlockStack gap="400">
@@ -417,29 +423,33 @@ export default function Index() {
                     </Box>
                     <Box paddingBlockStart="400" paddingBlockEnd="200">
                       <InlineStack align="center" gap="300">
-                        <Link
-                          to={`/app?page=${page - 1}${searchQuery ? `&search=${searchQuery}` : ''}${sortField ? `&sortField=${sortField}&sortDirection=${sortDirection}` : ''}`}
-                          style={{
-                            pointerEvents: page === 1 || isLoading ? "none" : "auto",
-                          }}
-                        >
-                          <Button disabled={page === 1 || isLoading} loading={isLoading}>
+                        {previousPageUrl ? (
+                          <Link to={previousPageUrl}>
+                            <Button disabled={isLoading} loading={isLoading}>
+                              {t("ordersList.pagination.previous")}
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Button disabled>
                             {t("ordersList.pagination.previous")}
                           </Button>
-                        </Link>
+                        )}
+
                         <Text as="span" variant="bodyMd">
-                          {t("ordersList.pagination.page", { current: page, total: pageCount || 1 })}
+                          {t("ordersList.pagination.showing", { count: orders.length })}
                         </Text>
-                        <Link
-                          to={`/app?page=${page + 1}${searchQuery ? `&search=${searchQuery}` : ''}${sortField ? `&sortField=${sortField}&sortDirection=${sortDirection}` : ''}`}
-                          style={{
-                            pointerEvents: page === pageCount || isLoading ? "none" : "auto",
-                          }}
-                        >
-                          <Button disabled={page === pageCount || isLoading} loading={isLoading}>
+
+                        {nextPageUrl ? (
+                          <Link to={nextPageUrl}>
+                            <Button disabled={isLoading} loading={isLoading}>
+                              {t("ordersList.pagination.next")}
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Button disabled>
                             {t("ordersList.pagination.next")}
                           </Button>
-                        </Link>
+                        )}
                       </InlineStack>
                     </Box>
                   </>

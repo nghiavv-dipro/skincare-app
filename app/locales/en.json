@@ -106,7 +106,8 @@
     "pagination": {
       "previous": "Previous",
       "next": "Next",
-      "page": "Page {{current}} / {{total}}"
+      "page": "Page {{current}} / {{total}}",
+      "showing": "Showing {{count}} orders"
     }
   }
 }

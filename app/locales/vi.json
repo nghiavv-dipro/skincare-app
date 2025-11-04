@@ -106,7 +106,8 @@
     "pagination": {
       "previous": "Trang trước",
       "next": "Trang sau",
-      "page": "Trang {{current}} / {{total}}"
+      "page": "Trang {{current}} / {{total}}",
+      "showing": "Hiển thị {{count}} đơn hàng"
     }
   }
 }
