@@ -24,8 +24,8 @@ import {
   buildPaginationVariables,
   mapSortField,
   buildSearchQuery,
-  buildPaginationUrl,
 } from "../utils/pagination.server";
+import { buildPaginationUrl } from "../utils/pagination";
 import { shopifyLogger } from "../utils/logger.server";
 
 export const loader = async ({ request }) => {
@@ -299,9 +299,6 @@ export default function Index() {
                       }
                     />
                   </div>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    {t("ordersList.totalOrders", { count: orders.length })}
-                  </Text>
                 </InlineStack>
                 <BlockStack gap="400">
                 {isLoading ? (
@@ -422,7 +419,7 @@ export default function Index() {
                       <Divider />
                     </Box>
                     <Box paddingBlockStart="400" paddingBlockEnd="200">
-                      <InlineStack align="center" gap="300">
+                      <InlineStack align="center" blockAlign="center" gap="300">
                         {previousPageUrl ? (
                           <Link to={previousPageUrl}>
                             <Button disabled={isLoading} loading={isLoading}>

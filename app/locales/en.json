@@ -69,6 +69,15 @@
   },
   "settings": {
     "title": "Settings",
+    "webhook": {
+      "title": "Automatic Tracking Sync",
+      "description": "Automatically fetch tracking number from carrier when a new order is created",
+      "enable": "Enable",
+      "disable": "Disable",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "saveSuccess": "Webhook setting saved successfully"
+    },
     "language": {
       "title": "Language",
       "description": "Choose your preferred language",

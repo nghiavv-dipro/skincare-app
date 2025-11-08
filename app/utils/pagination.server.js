@@ -1,6 +1,5 @@
 /**
  * Pagination Helper for Shopify GraphQL Cursor-based Pagination
- * Cải thiện performance bằng cách sử dụng cursor thay vì offset pagination
  */
 
 /**
@@ -75,33 +74,6 @@ export function buildSearchQuery(searchQuery) {
 }
 
 /**
- * Build URL with pagination parameters
- * @param {string} baseUrl - Base URL path
- * @param {Object} params - URL parameters
- * @returns {string} Full URL with parameters
- */
-export function buildPaginationUrl(baseUrl, params = {}) {
-  const {
-    cursor,
-    direction,
-    search,
-    sortField,
-    sortDirection,
-  } = params;
-
-  const searchParams = new URLSearchParams();
-
-  if (cursor) searchParams.set('cursor', cursor);
-  if (direction) searchParams.set('direction', direction);
-  if (search) searchParams.set('search', search);
-  if (sortField) searchParams.set('sortField', sortField);
-  if (sortDirection) searchParams.set('sortDirection', sortDirection);
-
-  const queryString = searchParams.toString();
-  return queryString ? `${baseUrl}?${queryString}` : baseUrl;
-}
-
-/**
  * Extract pagination info from GraphQL response
  * @param {Object} pageInfo - GraphQL pageInfo object
  * @param {Array} edges - GraphQL edges array
@@ -141,7 +113,6 @@ export default {
   buildPaginationVariables,
   mapSortField,
   buildSearchQuery,
-  buildPaginationUrl,
   extractPaginationInfo,
   getNavigationCursor,
 };
