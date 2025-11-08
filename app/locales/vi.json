@@ -69,6 +69,15 @@
   },
   "settings": {
     "title": "Cài đặt",
+    "webhook": {
+      "title": "Tự động đồng bộ mã vận chuyển",
+      "description": "Tự động lấy mã vận chuyển từ đơn vị vận chuyển khi có đơn hàng mới được tạo",
+      "enable": "Bật",
+      "disable": "Tắt",
+      "enabled": "Đã bật",
+      "disabled": "Đã tắt",
+      "saveSuccess": "Lưu cài đặt webhook thành công"
+    },
     "language": {
       "title": "Ngôn ngữ",
       "description": "Chọn ngôn ngữ bạn muốn sử dụng",

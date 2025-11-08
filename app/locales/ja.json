@@ -69,6 +69,15 @@
   },
   "settings": {
     "title": "設定",
+    "webhook": {
+      "title": "自動追跡同期",
+      "description": "新しい注文が作成されたときに配送業者から追跡番号を自動的に取得する",
+      "enable": "有効化",
+      "disable": "無効化",
+      "enabled": "有効",
+      "disabled": "無効",
+      "saveSuccess": "Webhook設定を保存しました"
+    },
     "language": {
       "title": "言語",
       "description": "使用言語を選択してください",

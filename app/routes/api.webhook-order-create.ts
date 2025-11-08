@@ -28,9 +28,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     if (!session) {
-      console.error("[Cron] ❌ No active shop session found");
-      return;
+      console.error(`❌ [${webhookId}] No active shop session found`);
+      return json({
+        success: false,
+        error: "No active shop session found"
+      }, { status: 404 });
     }
+
+    // Check if webhook sync is enabled for this shop
+    if (session.enableWebhookSync === false) {
+      console.log(`⏭️ [${webhookId}] Webhook sync is disabled for shop: ${session.shop}. Skipping...`);
+      return json({
+        success: true,
+        skipped: true,
+        message: "Webhook sync is disabled for this shop",
+        webhookId: webhookId,
+        timestamp: timestamp,
+      });
+    }
+
+    console.log(`✅ [${webhookId}] Webhook sync enabled. Processing order...`);
 
     const shop = session.shop;
     // Get admin API client

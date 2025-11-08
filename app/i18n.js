@@ -1,6 +1,5 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import LanguageDetector from "i18next-browser-languagedetector";
 
 import en from "./locales/en.json";
 import vi from "./locales/vi.json";
@@ -12,22 +11,24 @@ const resources = {
   ja: { translation: ja },
 };
 
+// Initialize i18n - same config for both server and client to avoid hydration issues
 i18n
-  .use(LanguageDetector) // Detect user language
-  .use(initReactI18next) // Pass i18n instance to react-i18next
+  .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: "en", // Default language
-    lng: "en", // Initial language
-    detection: {
-      // Store language preference in localStorage
-      order: ["localStorage", "navigator"],
-      caches: ["localStorage"],
-      lookupLocalStorage: "i18nextLng",
-    },
+    fallbackLng: "vi",
+    lng: "vi", // Always start with 'vi' on initial render
     interpolation: {
-      escapeValue: false, // React already escapes values
+      escapeValue: false,
     },
   });
+
+// On client-side, restore language from localStorage after hydration
+if (typeof window !== "undefined") {
+  const savedLanguage = localStorage.getItem("i18nextLng");
+  if (savedLanguage && savedLanguage !== i18n.language) {
+    i18n.changeLanguage(savedLanguage);
+  }
+}
 
 export default i18n;
