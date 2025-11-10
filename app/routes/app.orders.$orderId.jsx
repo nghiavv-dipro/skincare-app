@@ -542,13 +542,15 @@ export default function OrderDetail() {
                   </BlockStack>
 
                   <InlineStack align="end" gap="300">
-                    <Button
-                      onClick={handleGetTrackingNumber}
-                      loading={isSubmitting && submittingAction === "getTrackingNumber"}
-                      disabled={isSubmitting}
-                    >
-                      {t("order.actions.getTrackingNumber")}
-                    </Button>
+                    {!order.tracking_number && (
+                      <Button
+                        onClick={handleGetTrackingNumber}
+                        loading={isSubmitting && submittingAction === "getTrackingNumber"}
+                        disabled={isSubmitting}
+                      >
+                        {t("order.actions.getTrackingNumber")}
+                      </Button>
+                    )}
                     <Button
                       onClick={handleGetDeliveryStatus}
                       loading={isSubmitting && submittingAction === "getDeliveryStatus"}
@@ -698,7 +700,6 @@ export default function OrderDetail() {
                           {order.shipping_address.phone}
                         </Text>
                       )}
-                      <PolarisLink url="#">{t("order.customer.viewMap")}</PolarisLink>
                     </BlockStack>
                   ) : (
                     <Text variant="bodySm" tone="subdued">

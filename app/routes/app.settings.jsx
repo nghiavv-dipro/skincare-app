@@ -1,5 +1,5 @@
 import { json } from "@remix-run/node";
-import { useLoaderData, useActionData, useSubmit } from "@remix-run/react";
+import { useLoaderData, useActionData, useSubmit, Form, useNavigation } from "@remix-run/react";
 import { useEffect, useState } from "react";
 import {
   Page,
@@ -9,12 +9,20 @@ import {
   Text,
   Select,
   InlineStack,
+  Button,
+  Banner,
+  Badge,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useTranslation } from "react-i18next";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { Switch } from "../components/Switch";
+import { syncInventoryToShopify } from "../services/inventorySync.server";
+import {
+  createSyncLog,
+  failSyncLog,
+} from "../services/syncLogger.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -36,7 +44,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("actionType");
 
@@ -61,6 +69,42 @@ export const action = async ({ request }) => {
     return json({ success: true, webhook: true, enableWebhookSync });
   }
 
+  if (actionType === "inventorySync") {
+    let syncLog = null;
+
+    try {
+      // Tạo sync log
+      syncLog = await createSyncLog(session.shop);
+
+      // Chạy sync
+      const result = await syncInventoryToShopify(admin);
+
+      return json({
+        success: result.success,
+        inventorySync: true,
+        shop: session.shop,
+        timestamp: new Date().toISOString(),
+        summary: result.summary,
+        results: result.results,
+        errors: result.errors,
+      });
+    } catch (error) {
+      console.error("[Settings Inventory Sync] Error:", error);
+
+      // Log error
+      if (syncLog) {
+        await failSyncLog(syncLog.id, error);
+      }
+
+      return json({
+        success: false,
+        inventorySync: true,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
   return json({ success: false });
 };
 
@@ -70,10 +114,15 @@ export default function Settings() {
   const actionData = useActionData();
   const shopify = useAppBridge();
   const submit = useSubmit();
+  const navigation = useNavigation();
 
   const [selectedLanguage, setSelectedLanguage] = useState(i18n.language);
   const [enableWebhookSync, setEnableWebhookSync] = useState(loaderData.enableWebhookSync);
   const [isSaving, setIsSaving] = useState(false);
+  const [syncResults, setSyncResults] = useState(null);
+
+  const isSyncing = navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "inventorySync";
 
   const languageOptions = [
     { label: t("settings.language.english"), value: "en" },
@@ -87,10 +136,18 @@ export default function Settings() {
         // Update state from server response
         setEnableWebhookSync(actionData.enableWebhookSync);
         shopify.toast.show(t("settings.webhook.saveSuccess"));
+      } else if (actionData.inventorySync) {
+        // Update sync results
+        setSyncResults(actionData);
+        shopify.toast.show(t("settings.inventorySync.successMessage"));
       } else {
         shopify.toast.show(t("settings.language.saveSuccess"));
       }
       setIsSaving(false);
+    } else if (actionData && !actionData.success && actionData.inventorySync) {
+      // Handle sync error
+      setSyncResults(actionData);
+      shopify.toast.show(t("settings.inventorySync.failureMessage"), { isError: true });
     }
   }, [actionData, shopify, t]);
 
@@ -148,6 +205,74 @@ export default function Settings() {
                     disabled={isSaving}
                   />
                 </InlineStack>
+              </BlockStack>
+            </Card>
+
+            {/* Inventory Sync Setting */}
+            <Card>
+              <BlockStack gap="400">
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    {t("settings.inventorySync.title")}
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {t("settings.inventorySync.description")}
+                  </Text>
+                </BlockStack>
+
+                <Form method="post">
+                  <input type="hidden" name="actionType" value="inventorySync" />
+                  <Button
+                    variant="primary"
+                    submit
+                    loading={isSyncing}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? t("settings.inventorySync.syncing") : t("settings.inventorySync.syncButton")}
+                  </Button>
+                </Form>
+
+                {syncResults && (
+                  <BlockStack gap="300">
+                    {syncResults.success ? (
+                      <Banner tone="success">
+                        <BlockStack gap="200">
+                          <Text as="p" variant="bodyMd">
+                            {t("settings.inventorySync.successMessage")}
+                            {syncResults.results &&
+                              syncResults.results.filter(r => r.wasActivated).length > 0 && (
+                                <Text as="span" variant="bodyMd" tone="success">
+                                  {" "}✨ {t("settings.inventorySync.activated")} {syncResults.results.filter(r => r.wasActivated).length} {t("settings.inventorySync.newLocations")}
+                                </Text>
+                              )}
+                          </Text>
+                          <InlineStack gap="200">
+                            <Badge tone="success">
+                              {t("settings.inventorySync.summary.success")}: {syncResults.summary.success}
+                            </Badge>
+                            <Badge tone="warning">
+                              {t("settings.inventorySync.summary.skipped")}: {syncResults.summary.skipped}
+                            </Badge>
+                            {syncResults.summary.failed > 0 && (
+                              <Badge tone="critical">
+                                {t("settings.inventorySync.summary.failed")}: {syncResults.summary.failed}
+                              </Badge>
+                            )}
+                            <Badge>
+                              {t("settings.inventorySync.summary.duration")}: {syncResults.summary.duration}
+                            </Badge>
+                          </InlineStack>
+                        </BlockStack>
+                      </Banner>
+                    ) : (
+                      <Banner tone="critical">
+                        <Text as="p" variant="bodyMd">
+                          {t("settings.inventorySync.failureMessage")}: {syncResults.error}
+                        </Text>
+                      </Banner>
+                    )}
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
 

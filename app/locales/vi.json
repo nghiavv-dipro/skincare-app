@@ -78,6 +78,22 @@
       "disabled": "Đã tắt",
       "saveSuccess": "Lưu cài đặt webhook thành công"
     },
+    "inventorySync": {
+      "title": "Đồng bộ tồn kho",
+      "description": "Đồng bộ số lượng tồn kho từ API kho lên Shopify. Bạn có thể thực hiện đồng bộ thủ công bất cứ lúc nào.",
+      "syncButton": "Đồng bộ ngay",
+      "syncing": "Đang đồng bộ...",
+      "successMessage": "Đồng bộ tồn kho thành công!",
+      "failureMessage": "Đồng bộ tồn kho thất bại",
+      "activated": "Đã kích hoạt",
+      "newLocations": "location mới!",
+      "summary": {
+        "success": "Thành công",
+        "skipped": "Bỏ qua",
+        "failed": "Lỗi",
+        "duration": "Thời gian"
+      }
+    },
     "language": {
       "title": "Ngôn ngữ",
       "description": "Chọn ngôn ngữ bạn muốn sử dụng",

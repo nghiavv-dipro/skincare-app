@@ -89,36 +89,66 @@ async function fetchWarehouseById(warehouseId) {
 function mergeWarehouseData(warehouse7Data, warehouse9Data) {
   const inventoryMap = new Map();
 
+  // Ensure inputs are arrays
+  const warehouse7Items = Array.isArray(warehouse7Data) ? warehouse7Data : [];
+  const warehouse9Items = Array.isArray(warehouse9Data) ? warehouse9Data : [];
+
   // Process warehouse 7 (Japan)
-  for (const item of warehouse7Data) {
+  for (const item of warehouse7Items) {
+    // Skip items without valid product data
+    if (!item || !item.product || !item.product.sku) {
+      console.warn('[Warehouse API] Skipping item without valid product/sku in warehouse 7:', item);
+      continue;
+    }
+
     const sku = item.product.sku;
+
+    // Skip empty SKUs
+    if (sku.trim() === '') {
+      console.warn('[Warehouse API] Skipping item with empty SKU in warehouse 7');
+      continue;
+    }
+
     if (!inventoryMap.has(sku)) {
       inventoryMap.set(sku, {
         sku: sku,
-        product_name: item.product.name,
+        product_name: item.product.name || 'Unknown Product',
         locations: [],
       });
     }
 
     inventoryMap.get(sku).locations.push({
-      location_name: WAREHOUSE_LOCATION_MAP[7], // "Japan"
+      location_name: WAREHOUSE_LOCATION_MAP[7], // "Narita - JP"
       quantity: item.sale_inventory_quantity || 0,
     });
   }
 
   // Process warehouse 9 (Viet Nam Ha Noi)
-  for (const item of warehouse9Data) {
+  for (const item of warehouse9Items) {
+    // Skip items without valid product data
+    if (!item || !item.product || !item.product.sku) {
+      console.warn('[Warehouse API] Skipping item without valid product/sku in warehouse 9:', item);
+      continue;
+    }
+
     const sku = item.product.sku;
+
+    // Skip empty SKUs
+    if (sku.trim() === '') {
+      console.warn('[Warehouse API] Skipping item with empty SKU in warehouse 9');
+      continue;
+    }
+
     if (!inventoryMap.has(sku)) {
       inventoryMap.set(sku, {
         sku: sku,
-        product_name: item.product.name,
+        product_name: item.product.name || 'Unknown Product',
         locations: [],
       });
     }
 
     inventoryMap.get(sku).locations.push({
-      location_name: WAREHOUSE_LOCATION_MAP[9], // "Viet Nam Ha Noi"
+      location_name: WAREHOUSE_LOCATION_MAP[9], // "Ba Đình - HN"
       quantity: item.sale_inventory_quantity || 0,
     });
   }

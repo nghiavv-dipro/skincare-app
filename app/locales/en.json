@@ -78,6 +78,22 @@
       "disabled": "Disabled",
       "saveSuccess": "Webhook setting saved successfully"
     },
+    "inventorySync": {
+      "title": "Inventory Sync",
+      "description": "Sync inventory quantities from warehouse API to Shopify. You can manually sync at any time.",
+      "syncButton": "Sync Now",
+      "syncing": "Syncing...",
+      "successMessage": "Inventory sync successful!",
+      "failureMessage": "Inventory sync failed",
+      "activated": "Activated",
+      "newLocations": "new locations!",
+      "summary": {
+        "success": "Success",
+        "skipped": "Skipped",
+        "failed": "Failed",
+        "duration": "Duration"
+      }
+    },
     "language": {
       "title": "Language",
       "description": "Choose your preferred language",

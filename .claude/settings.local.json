@@ -29,7 +29,14 @@
       "Bash(node /tmp/update-tracking-fn.mjs:*)",
       "Bash(node fix-diacritics.mjs)",
       "Bash(node update-locales.mjs:*)",
-      "Bash(node deploy-improvements.mjs:*)"
+      "Bash(node deploy-improvements.mjs:*)",
+      "Bash(powershell:*)",
+      "Bash(node update-webhook-query.mjs:*)",
+      "Bash(node improve-warehouse-logging.mjs:*)",
+      "Bash(npm run shopify:*)",
+      "Bash(node /tmp/check-shopify-products.mjs:*)",
+      "Bash(node check-shopify-products.mjs:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

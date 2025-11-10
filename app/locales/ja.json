@@ -78,6 +78,22 @@
       "disabled": "無効",
       "saveSuccess": "Webhook設定を保存しました"
     },
+    "inventorySync": {
+      "title": "在庫同期",
+      "description": "倉庫APIからShopifyへ在庫数量を同期します。いつでも手動で同期できます。",
+      "syncButton": "今すぐ同期",
+      "syncing": "同期中...",
+      "successMessage": "在庫同期が成功しました！",
+      "failureMessage": "在庫同期が失敗しました",
+      "activated": "有効化されました",
+      "newLocations": "の新しいロケーション！",
+      "summary": {
+        "success": "成功",
+        "skipped": "スキップ",
+        "failed": "失敗",
+        "duration": "所要時間"
+      }
+    },
     "language": {
       "title": "言語",
       "description": "使用言語を選択してください",

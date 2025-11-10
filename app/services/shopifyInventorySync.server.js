@@ -180,7 +180,6 @@ async function fetchShopifyVariantsWithInventory(admin) {
                     edges {
                       node {
                         id
-                        available
                         location {
                           id
                           name
