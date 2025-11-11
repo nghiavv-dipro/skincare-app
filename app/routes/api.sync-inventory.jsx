@@ -1,6 +1,6 @@
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { syncInventoryToShopify } from "../services/shopifyInventorySync.server";
+import { syncInventoryToShopify } from "../services/inventorySync.server";
 
 /**
  * API endpoint để đồng bộ inventory
@@ -27,15 +27,18 @@ export const action = async ({ request }) => {
     const result = await syncInventoryToShopify(admin);
 
     return json({
-      success: result.status !== "failed",
+      success: result.success,
       shop: session.shop,
       timestamp: new Date().toISOString(),
-      status: result.status,
-      totalItems: result.totalItems,
-      updatedItems: result.updatedItems,
-      failedItems: result.failedItems,
-      skippedItems: result.skippedItems,
-      errorMessage: result.errorMessage,
+      summary: result.summary,
+      results: result.results,
+      errors: result.errors,
+      // Legacy format for backward compatibility
+      status: result.success ? "success" : "failed",
+      totalItems: result.summary.total,
+      updatedItems: result.summary.success,
+      failedItems: result.summary.failed,
+      skippedItems: result.summary.skipped,
     });
   } catch (error) {
     console.error("[API Sync] Error:", error);

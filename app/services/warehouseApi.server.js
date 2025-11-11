@@ -71,10 +71,13 @@ async function fetchWarehouseById(warehouseId) {
     }
 
     // Check if there are more pages
-    hasMorePages = data.current_page < data.last_page;
+    const currentPageNum = data.current_page || currentPage;
+    const lastPageNum = data.last_page || 1;
+    hasMorePages = currentPageNum < lastPageNum;
     currentPage++;
 
-    console.log(`[Warehouse API] Fetched page ${data.current_page}/${data.last_page} for warehouse ${warehouseId} (${data.data.length} items)`);
+    const itemCount = data.data ? data.data.length : 0;
+    console.log(`[Warehouse API] Fetched page ${currentPageNum}/${lastPageNum} for warehouse ${warehouseId} (${itemCount} items)`);
   }
 
   return allData;

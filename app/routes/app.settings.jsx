@@ -19,10 +19,6 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { Switch } from "../components/Switch";
 import { syncInventoryToShopify } from "../services/inventorySync.server";
-import {
-  createSyncLog,
-  failSyncLog,
-} from "../services/syncLogger.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -70,14 +66,19 @@ export const action = async ({ request }) => {
   }
 
   if (actionType === "inventorySync") {
-    let syncLog = null;
-
     try {
-      // Tạo sync log
-      syncLog = await createSyncLog(session.shop);
+      console.log(`[Settings Sync] Starting inventory sync for shop: ${session.shop}`);
 
       // Chạy sync
       const result = await syncInventoryToShopify(admin);
+
+      console.log(`[Settings Sync] ✅ Sync completed:`, {
+        success: result.success,
+        shop: session.shop,
+        timestamp: new Date().toISOString(),
+        summary: result.summary,
+        errors: result.errors,
+      });
 
       return json({
         success: result.success,
@@ -89,12 +90,8 @@ export const action = async ({ request }) => {
         errors: result.errors,
       });
     } catch (error) {
-      console.error("[Settings Inventory Sync] Error:", error);
-
-      // Log error
-      if (syncLog) {
-        await failSyncLog(syncLog.id, error);
-      }
+      console.error("[Settings Sync] ❌ Error:", error.message);
+      console.error("[Settings Sync] Stack:", error.stack);
 
       return json({
         success: false,

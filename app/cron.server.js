@@ -4,7 +4,7 @@
  */
 
 import cron from "node-cron";
-import { syncInventoryToShopify } from "./services/shopifyInventorySync.server.js";
+import { syncInventoryToShopify } from "./services/inventorySync.server.js";
 import { unauthenticated } from "./shopify.server.js";
 import prisma from "./db.server";
 
@@ -37,7 +37,8 @@ export function startCronJobs() {
   // Cron format: minute hour day month weekday
   // "0 * * * *" = At minute 0 of every hour
   cron.schedule("0 * * * *", async () => {
-    console.log(`[Cron] Triggered hourly inventory sync at ${new Date().toISOString()}`);
+    const timestamp = new Date().toISOString();
+    console.log(`[Cron Sync] Triggered hourly inventory sync at ${timestamp}`);
 
     try {
       // Get the first available shop session
@@ -51,12 +52,12 @@ export function startCronJobs() {
       });
 
       if (!session) {
-        console.error("[Cron] ❌ No active shop session found");
+        console.error("[Cron Sync] ❌ No active shop session found");
         return;
       }
 
       const shop = session.shop;
-      console.log(`[Cron] Running inventory sync for shop: ${shop}`);
+      console.log(`[Cron Sync] Starting inventory sync for shop: ${shop}`);
 
       // Get admin API client
       const { admin } = await unauthenticated.admin(shop);
@@ -64,14 +65,17 @@ export function startCronJobs() {
       // Run inventory sync
       const result = await syncInventoryToShopify(admin);
 
-      console.log(`[Cron] ✅ Inventory sync completed:`, {
-        status: result.status,
-        updated: result.updatedItems,
-        failed: result.failedItems,
-        skipped: result.skippedItems,
+      // Log result in same format as API sync
+      console.log(`[Cron Sync] ✅ Sync completed:`, {
+        success: result.success,
+        shop: shop,
+        timestamp: new Date().toISOString(),
+        summary: result.summary,
+        errors: result.errors,
       });
     } catch (error) {
-      console.error("[Cron] ❌ Error running inventory sync:", error);
+      console.error("[Cron Sync] ❌ Error:", error.message);
+      console.error("[Cron Sync] Stack:", error.stack);
     }
   });
 

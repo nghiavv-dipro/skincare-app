@@ -6,6 +6,59 @@
 import { fetchWarehouseInventory, validateInventoryData } from "./warehouseApi.server.js";
 
 /**
+ * Sleep/delay utility for rate limiting
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute GraphQL query with retry logic for 503 errors
+ * @param {Object} admin - Shopify admin API client
+ * @param {string} query - GraphQL query
+ * @param {Object} variables - Query variables
+ * @param {number} maxRetries - Maximum retry attempts
+ * @returns {Promise<Object>}
+ */
+async function graphqlWithRetry(admin, query, variables = {}, maxRetries = 3) {
+  let retryCount = 0;
+
+  while (retryCount < maxRetries) {
+    try {
+      const response = await admin.graphql(query, { variables });
+      const data = await response.json();
+
+      // Check for GraphQL errors
+      if (data.errors) {
+        throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
+      }
+
+      return data;
+    } catch (error) {
+      retryCount++;
+
+      // Check if it's a 503 error (service unavailable)
+      const is503 = error.response?.code === 503 ||
+                     error.message?.includes('503') ||
+                     error.message?.includes('Service Unavailable');
+
+      if (is503 && retryCount < maxRetries) {
+        const backoffDelay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+        console.warn(`[Inventory Sync] ⚠️ Shopify API unavailable (503), retry ${retryCount}/${maxRetries} after ${backoffDelay}ms`);
+        await sleep(backoffDelay);
+      } else {
+        // Other errors or max retries reached, throw
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Max retries reached');
+}
+
+/**
  * Đồng bộ inventory từ warehouse lên Shopify
  *
  * @param {Object} admin - Shopify admin API client
@@ -28,11 +81,33 @@ export async function syncInventoryToShopify(admin) {
 
     console.log(`[Inventory Sync] Fetched ${warehouseInventory.length} items from warehouse`);
 
-    // Step 2: Sync từng sản phẩm
+    // Log warehouse inventory details
+    console.log("\n[Inventory Sync] ===== WAREHOUSE INVENTORY DATA =====");
+    warehouseInventory.forEach((item, index) => {
+      console.log(`\n[${index + 1}/${warehouseInventory.length}] SKU: ${item.sku}`);
+      console.log(`  Product: ${item.product_name}`);
+      console.log(`  Locations:`);
+      item.locations.forEach(loc => {
+        console.log(`    📍 ${loc.location_name}: ${loc.quantity} units`);
+      });
+    });
+    console.log("\n[Inventory Sync] ======================================\n");
+
+    // Step 2: Sync từng sản phẩm với rate limiting
+    const DELAY_BETWEEN_PRODUCTS = 300; // 300ms delay between products to avoid rate limit
+    let processedCount = 0;
+
     for (const item of warehouseInventory) {
       try {
         const result = await syncProductInventory(admin, item);
         results.push(...result); // result là array vì có nhiều locations
+
+        processedCount++;
+
+        // Add delay between products (except for the last one)
+        if (processedCount < warehouseInventory.length) {
+          await sleep(DELAY_BETWEEN_PRODUCTS);
+        }
       } catch (error) {
         console.error(`[Inventory Sync] Error syncing SKU ${item.sku}:`, error);
         errors.push({
@@ -74,10 +149,17 @@ export async function syncInventoryToShopify(admin) {
  * @returns {Promise<Array<{success: boolean, sku: string, location: string, message: string}>>}
  */
 async function syncProductInventory(admin, item) {
-  const { sku, locations: warehouseLocations } = item;
+  const { sku, product_name, locations: warehouseLocations } = item;
+
+  console.log(`\n[Sync Product] Processing SKU: ${sku} (${product_name})`);
+  console.log(`[Sync Product] Warehouse locations (${warehouseLocations.length}):`);
+  warehouseLocations.forEach(loc => {
+    console.log(`  - ${loc.location_name}: ${loc.quantity} units`);
+  });
 
   // Step 1: Tìm product variant theo SKU
-  const variantResponse = await admin.graphql(
+  const variantData = await graphqlWithRetry(
+    admin,
     `#graphql
       query getVariantBySku($query: String!) {
         productVariants(first: 1, query: $query) {
@@ -94,16 +176,14 @@ async function syncProductInventory(admin, item) {
         }
       }`,
     {
-      variables: {
-        query: `sku:${sku}`,
-      },
+      query: `sku:${sku}`,
     }
   );
 
-  const variantData = await variantResponse.json();
   const variants = variantData.data.productVariants.edges;
 
   if (variants.length === 0) {
+    console.log(`[Sync Product] ❌ SKU ${sku} not found in Shopify`);
     return [{
       success: false,
       skipped: true,
@@ -115,9 +195,11 @@ async function syncProductInventory(admin, item) {
 
   const variant = variants[0].node;
   const inventoryItemId = variant.inventoryItem.id;
+  console.log(`[Sync Product] ✅ Found variant in Shopify: ${variant.displayName} (ID: ${variant.id})`);
 
   // Step 2: Lấy tất cả inventory levels cho product này
-  const inventoryResponse = await admin.graphql(
+  const inventoryData = await graphqlWithRetry(
+    admin,
     `#graphql
       query getInventoryLevels($inventoryItemId: ID!) {
         inventoryItem(id: $inventoryItemId) {
@@ -139,17 +221,21 @@ async function syncProductInventory(admin, item) {
         }
       }`,
     {
-      variables: {
-        inventoryItemId,
-      },
+      inventoryItemId,
     }
   );
 
-  const inventoryData = await inventoryResponse.json();
   const inventoryLevels = inventoryData.data.inventoryItem.inventoryLevels.edges;
 
+  console.log(`[Sync Product] Current Shopify inventory levels (${inventoryLevels.length}):`);
+  inventoryLevels.forEach(level => {
+    const qty = level.node.quantities.find(q => q.name === "available")?.quantity || 0;
+    console.log(`  - ${level.node.location.name}: ${qty} units`);
+  });
+
   // Step 2.5: Query tất cả locations có sẵn trong shop
-  const locationsResponse = await admin.graphql(
+  const locationsData = await graphqlWithRetry(
+    admin,
     `#graphql
       query getLocations {
         locations(first: 10) {
@@ -160,10 +246,10 @@ async function syncProductInventory(admin, item) {
             }
           }
         }
-      }`
+      }`,
+    {}
   );
 
-  const locationsData = await locationsResponse.json();
   const allLocations = locationsData.data.locations.edges;
 
   if (inventoryLevels.length === 0 && allLocations.length === 0) {
@@ -208,7 +294,8 @@ async function syncProductInventory(admin, item) {
         // Activate inventory level cho location này
         console.log(`[Inventory Sync] Activating inventory for SKU ${sku} at ${targetLocation.node.name}...`);
 
-        const activateResponse = await admin.graphql(
+        const activateData = await graphqlWithRetry(
+          admin,
           `#graphql
             mutation inventoryActivate($inventoryItemId: ID!, $locationId: ID!) {
               inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
@@ -230,14 +317,11 @@ async function syncProductInventory(admin, item) {
               }
             }`,
           {
-            variables: {
-              inventoryItemId,
-              locationId: targetLocation.node.id,
-            },
+            inventoryItemId,
+            locationId: targetLocation.node.id,
           }
         );
 
-        const activateData = await activateResponse.json();
         const activateErrors = activateData.data.inventoryActivate.userErrors;
 
         if (activateErrors && activateErrors.length > 0) {
@@ -271,6 +355,7 @@ async function syncProductInventory(admin, item) {
 
       // Skip nếu quantity giống nhau
       if (currentQuantity === newQuantity) {
+        console.log(`[Sync Product] ⏭️  Skip ${locationName}: quantity unchanged (${newQuantity})`);
         updateResults.push({
           success: true,
           skipped: true,
@@ -283,7 +368,9 @@ async function syncProductInventory(admin, item) {
 
       // Step 4: Update inventory
       const delta = newQuantity - currentQuantity;
-      const updateResponse = await admin.graphql(
+      console.log(`[Sync Product] 🔄 Updating ${locationName}: ${currentQuantity} → ${newQuantity} (${delta > 0 ? '+' : ''}${delta})`);
+      const updateData = await graphqlWithRetry(
+        admin,
         `#graphql
           mutation adjustInventoryQuantities($input: InventoryAdjustQuantitiesInput!) {
             inventoryAdjustQuantities(input: $input) {
@@ -301,26 +388,24 @@ async function syncProductInventory(admin, item) {
             }
           }`,
         {
-          variables: {
-            input: {
-              reason: "correction",
-              name: "available",
-              changes: [
-                {
-                  inventoryItemId,
-                  locationId,
-                  delta,
-                },
-              ],
-            },
+          input: {
+            reason: "correction",
+            name: "available",
+            changes: [
+              {
+                inventoryItemId,
+                locationId,
+                delta,
+              },
+            ],
           },
         }
       );
 
-      const updateData = await updateResponse.json();
       const userErrors = updateData.data.inventoryAdjustQuantities.userErrors;
 
       if (userErrors && userErrors.length > 0) {
+        console.log(`[Sync Product] ❌ Failed to update ${locationName}: ${userErrors[0].message}`);
         throw new Error(`Shopify API error: ${userErrors[0].message}`);
       }
 
@@ -329,7 +414,7 @@ async function syncProductInventory(admin, item) {
       );
 
       console.log(
-        `[Inventory Sync] ${wasActivated ? '🆕 Activated & Updated' : 'Updated'} SKU ${sku} at ${locationName}: ${currentQuantity} -> ${newQuantity} (delta: ${delta > 0 ? "+" : ""}${delta})`
+        `[Sync Product] ✅ ${wasActivated ? 'Activated & Updated' : 'Updated'} ${locationName}: ${currentQuantity} → ${newQuantity} (${delta > 0 ? '+' : ''}${delta})`
       );
 
       updateResults.push({
@@ -346,7 +431,7 @@ async function syncProductInventory(admin, item) {
           : `Successfully updated SKU ${sku} at ${locationName} from ${currentQuantity} to ${newQuantity}`,
       });
     } catch (error) {
-      console.error(`[Inventory Sync] Error updating ${sku} at ${warehouseLoc.location_name}:`, error);
+      console.error(`[Sync Product] ❌ Error updating ${sku} at ${warehouseLoc.location_name}:`, error.message);
       updateResults.push({
         success: false,
         skipped: false,
@@ -357,6 +442,12 @@ async function syncProductInventory(admin, item) {
       });
     }
   }
+
+  // Log summary for this product
+  const successCount = updateResults.filter(r => r.success && !r.skipped).length;
+  const skippedCount = updateResults.filter(r => r.skipped).length;
+  const failedCount = updateResults.filter(r => !r.success).length;
+  console.log(`[Sync Product] Summary for ${sku}: ${successCount} updated, ${skippedCount} skipped, ${failedCount} failed\n`);
 
   return updateResults;
 }
