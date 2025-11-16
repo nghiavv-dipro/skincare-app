@@ -418,6 +418,53 @@ export async function getTrackingNumber(admin, orderId) {
     const shopifyOrderId = `gid://shopify/Order/${orderId}`;
     console.log(`[Carrier API] 🔍 Fetching Shopify order: ${shopifyOrderId}`);
 
+    // Kiểm tra xem đã có sale_order_id trong metafields chưa
+    const metafieldsResponse = await admin.graphql(
+      `#graphql
+        query getOrderMetafields($id: ID!) {
+          order(id: $id) {
+            id
+            metafields(first: 10, namespace: "custom") {
+              edges {
+                node {
+                  key
+                  value
+                }
+              }
+            }
+          }
+        }`,
+      {
+        variables: {
+          id: shopifyOrderId,
+        },
+      }
+    );
+
+    const metafieldsData = await metafieldsResponse.json();
+    const metafields = {};
+    metafieldsData.data?.order?.metafields?.edges?.forEach(edge => {
+      metafields[edge.node.key] = edge.node.value;
+    });
+
+    // Nếu đã có sale_order_id, trả về luôn không tạo mới
+    if (metafields.sale_order_id) {
+      console.log(`[Carrier API] ✅ Found existing sale_order_id: ${metafields.sale_order_id}`);
+      console.log(`[Carrier API] 📝 Skipping API call to avoid creating duplicate order`);
+
+      // Lấy delivery status từ API warehouse
+      const statusResult = await getDeliveryStatus(metafields.sale_order_id);
+
+      return {
+        success: true,
+        error: false,
+        trackingNumber: metafields.sale_order_id,
+        deliveryStatus: statusResult.success ? statusResult.deliveryStatus : null,
+      };
+    }
+
+    console.log(`[Carrier API] 📝 No existing sale_order_id found, proceeding to create new order`);
+
     const shopifyOrder = await fetchShopifyOrder(admin, shopifyOrderId);
 
     if (!shopifyOrder) {
