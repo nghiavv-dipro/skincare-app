@@ -21,7 +21,7 @@ import { LocationIcon, CheckIcon } from "@shopify/polaris-icons";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useTranslation } from "react-i18next";
 import { authenticate } from "../shopify.server";
-import { getDeliveryStatus, getTrackingNumber, updateOrderMetafields } from "../services/warehouseOrderApi.server";
+import { getDeliveryStatus, getTrackingNumber, updateOrderMetafields, shouldFulfillOrder, fulfillOrder } from "../services/warehouseOrderApi.server";
 
 export const loader = async ({ request, params }) => {
   // Authenticate and get admin API client using session token
@@ -224,6 +224,26 @@ export const action = async ({ request, params }) => {
           value: result.deliveryStatus,
         },
       ]);
+
+      // Check if we should fulfill the order based on the new status
+      if (shouldFulfillOrder(result.deliveryStatus)) {
+        console.log(`[Order Detail] 📦 Status "${result.deliveryStatus}" requires fulfillment, fulfilling order...`);
+
+        const fulfillResult = await fulfillOrder(admin, shopifyOrderId, trackingNumber);
+
+        if (fulfillResult.success) {
+          if (fulfillResult.alreadyFulfilled) {
+            console.log(`[Order Detail] ⏭️ Order ${shopifyOrderId} was already fulfilled`);
+          } else {
+            console.log(`[Order Detail] ✅ Order ${shopifyOrderId} fulfilled successfully`);
+          }
+        } else {
+          console.error(`[Order Detail] ⚠️ Failed to fulfill order: ${fulfillResult.error}`);
+          // Don't fail the action if fulfillment fails, just log the error
+        }
+      } else {
+        console.log(`[Order Detail] ⏭️ Status "${result.deliveryStatus}" does not require fulfillment yet`);
+      }
 
       return json({
         success: true,

@@ -1,6 +1,7 @@
 import { json } from "@remix-run/node";
 import { unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
+import { shouldFulfillOrder, fulfillOrder } from "../services/warehouseOrderApi.server";
 
 /**
  * Webhook endpoint for warehouse to update delivery status
@@ -156,6 +157,27 @@ export async function action({ request }) {
 
     if (updated) {
       console.log(`[Warehouse Status Webhook] ✅ Updated delivery status to "${newStatus}" for order ${shopifyOrderId}`);
+
+      // Check if we should fulfill the order based on the new status
+      if (shouldFulfillOrder(newStatus)) {
+        console.log(`[Warehouse Status Webhook] 📦 Status "${newStatus}" requires fulfillment, fulfilling order...`);
+
+        const fulfillResult = await fulfillOrder(admin, shopifyOrderId, saleOrderId);
+
+        if (fulfillResult.success) {
+          if (fulfillResult.alreadyFulfilled) {
+            console.log(`[Warehouse Status Webhook] ⏭️ Order ${shopifyOrderId} was already fulfilled`);
+          } else {
+            console.log(`[Warehouse Status Webhook] ✅ Order ${shopifyOrderId} fulfilled successfully`);
+          }
+        } else {
+          console.error(`[Warehouse Status Webhook] ⚠️ Failed to fulfill order: ${fulfillResult.error}`);
+          // Don't fail the webhook if fulfillment fails, just log the error
+        }
+      } else {
+        console.log(`[Warehouse Status Webhook] ⏭️ Status "${newStatus}" does not require fulfillment yet`);
+      }
+
       return json({
         success: true,
         message: "Delivery status updated successfully",

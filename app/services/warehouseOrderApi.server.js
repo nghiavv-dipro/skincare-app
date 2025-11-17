@@ -619,6 +619,268 @@ export async function saveWarehouseOrderToShopify(admin, orderId, warehouseData)
 }
 
 /**
+ * Cancel sale order ở warehouse
+ * @param {string} saleOrderId - Sale order ID (tracking number)
+ * @returns {Promise<{success: boolean, data?: {id: string, status_id: string, payment_status_id: string, cancelled_at: string}, error?: string}>}
+ */
+export async function cancelSaleOrder(saleOrderId) {
+  try {
+    console.log(`[Warehouse Order API] 🚫 Cancelling sale order: ${saleOrderId}`);
+
+    // Validate config
+    if (!process.env.WAREHOUSE_API_URL) {
+      throw new Error("WAREHOUSE_API_URL not configured");
+    }
+
+    // Call warehouse API to cancel sale order
+    console.log(`[Warehouse Order API] 🌐 Calling warehouse API: POST ${process.env.WAREHOUSE_API_URL}/sale-orders/${saleOrderId}/cancel`);
+
+    const response = await fetch(`${process.env.WAREHOUSE_API_URL}/sale-orders/${saleOrderId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': process.env.WAREHOUSE_API_TOKEN ? `Bearer ${process.env.WAREHOUSE_API_TOKEN}` : undefined,
+      },
+    });
+
+    console.log(`[Warehouse Order API] 📥 Response status: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      // Log chi tiết lỗi API để debug
+      console.error("[Warehouse Order API] ❌ Warehouse API error:", {
+        status: response.status,
+        statusText: response.statusText,
+        saleOrderId: saleOrderId,
+        responseBody: errorText,
+      });
+
+      // Parse error message nếu có
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.message) {
+          console.error("[Warehouse Order API] API error message:", errorData.message);
+        }
+      } catch (parseError) {
+        console.error("[Warehouse Order API] Raw error:", errorText);
+      }
+
+      return {
+        success: false,
+        error: "Không thể hủy đơn hàng",
+      };
+    }
+
+    const data = await response.json();
+
+    console.log(`[Warehouse Order API] ✅ Successfully cancelled sale order: ${saleOrderId}`);
+    console.log(`[Warehouse Order API] 📋 Response:`, JSON.stringify(data, null, 2));
+
+    return {
+      success: true,
+      data: data, // Include response data with id and status_id
+    };
+  } catch (error) {
+    console.error("[Warehouse Order API] ❌ Error cancelling sale order:", error);
+
+    return {
+      success: false,
+      error: "Không thể hủy đơn hàng",
+    };
+  }
+}
+
+/**
+ * Check if order should be fulfilled based on delivery status
+ * @param {string} deliveryStatus - Delivery status from warehouse
+ * @returns {boolean}
+ */
+export function shouldFulfillOrder(deliveryStatus) {
+  // List of statuses that should trigger fulfillment
+  const fulfillableStatuses = [
+    'waiting-for-transfer',
+    'transfering-to-warehouse',
+    'arrived-at-warehouse',
+    'ready-to-deliver',
+    'shipping',
+    'delivery-complete',
+  ];
+
+  return fulfillableStatuses.includes(deliveryStatus);
+}
+
+/**
+ * Fulfill Shopify order (mark as Fulfilled)
+ * @param {Object} admin - Shopify admin API client
+ * @param {string} orderId - Shopify order ID (gid://shopify/Order/xxx)
+ * @param {string} trackingNumber - Tracking number for the fulfillment
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function fulfillOrder(admin, orderId, trackingNumber) {
+  try {
+    console.log(`[Warehouse Order API] 📦 Fulfilling order: ${orderId}`);
+
+    // First, get the order's line items and location
+    const orderResponse = await admin.graphql(
+      `#graphql
+        query getOrder($id: ID!) {
+          order(id: $id) {
+            id
+            displayFulfillmentStatus
+            lineItems(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                }
+              }
+            }
+          }
+        }`,
+      {
+        variables: {
+          id: orderId,
+        },
+      }
+    );
+
+    const orderData = await orderResponse.json();
+
+    if (orderData.errors) {
+      console.error("[Warehouse Order API] ❌ GraphQL errors:", JSON.stringify(orderData.errors, null, 2));
+      return {
+        success: false,
+        error: "Failed to fetch order details",
+      };
+    }
+
+    const order = orderData.data?.order;
+
+    if (!order) {
+      console.error("[Warehouse Order API] ❌ Order not found:", orderId);
+      return {
+        success: false,
+        error: "Order not found",
+      };
+    }
+
+    // Check if already fulfilled
+    if (order.displayFulfillmentStatus === "FULFILLED") {
+      console.log(`[Warehouse Order API] ⏭️ Order ${orderId} is already fulfilled, skipping`);
+      return {
+        success: true,
+        alreadyFulfilled: true,
+      };
+    }
+
+    // Create fulfillment for all line items
+    const lineItems = order.lineItems.edges.map(edge => ({
+      id: edge.node.id,
+      quantity: edge.node.quantity,
+    }));
+
+    console.log(`[Warehouse Order API] 📋 Fulfilling ${lineItems.length} line items`);
+
+    const fulfillmentResponse = await admin.graphql(
+      `#graphql
+        mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+          fulfillmentCreateV2(fulfillment: $fulfillment) {
+            fulfillment {
+              id
+              status
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+      {
+        variables: {
+          fulfillment: {
+            lineItemsByFulfillmentOrder: [
+              {
+                fulfillmentOrderId: orderId.replace('/Order/', '/FulfillmentOrder/'),
+              }
+            ],
+            trackingInfo: trackingNumber ? {
+              number: trackingNumber,
+            } : undefined,
+          },
+        },
+      }
+    );
+
+    const fulfillmentData = await fulfillmentResponse.json();
+
+    const errors = fulfillmentData.data?.fulfillmentCreateV2?.userErrors;
+
+    if (errors && errors.length > 0) {
+      console.error("[Warehouse Order API] ❌ Error creating fulfillment:", JSON.stringify(errors, null, 2));
+
+      // Try alternative method: fulfillmentCreate (v1)
+      console.log("[Warehouse Order API] 🔄 Trying alternative fulfillment method...");
+
+      const altResponse = await admin.graphql(
+        `#graphql
+          mutation fulfillmentCreate($input: FulfillmentInput!) {
+            fulfillmentCreate(input: $input) {
+              fulfillment {
+                id
+                status
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+        {
+          variables: {
+            input: {
+              orderId: orderId,
+              lineItems: lineItems,
+              trackingInfo: trackingNumber ? {
+                number: trackingNumber,
+              } : undefined,
+            },
+          },
+        }
+      );
+
+      const altData = await altResponse.json();
+      const altErrors = altData.data?.fulfillmentCreate?.userErrors;
+
+      if (altErrors && altErrors.length > 0) {
+        console.error("[Warehouse Order API] ❌ Error with alternative method:", JSON.stringify(altErrors, null, 2));
+        return {
+          success: false,
+          error: altErrors[0].message,
+        };
+      }
+
+      console.log(`[Warehouse Order API] ✅ Order fulfilled successfully using alternative method`);
+      return {
+        success: true,
+      };
+    }
+
+    console.log(`[Warehouse Order API] ✅ Order fulfilled successfully`);
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error("[Warehouse Order API] ❌ Error fulfilling order:", error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
  * Cập nhật metafields cho Shopify order
  * @param {Object} admin - Shopify admin API client
  * @param {string} orderId - Shopify order ID (gid://shopify/Order/xxx)
