@@ -16,6 +16,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const payload = JSON.parse(body);
 
     console.log(`🚫 [${webhookId}] Order cancelled: ${payload.name} (#${payload.id})`);
+    console.log(`📦 [${webhookId}] Webhook payload:`, JSON.stringify(payload, null, 2));
 
     // Get the first available shop session
     const session = await prisma.session.findFirst({
@@ -54,10 +55,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin } = await unauthenticated.admin(shop);
 
     const orderId = payload.id; // Numeric order ID
-    const shopifyOrderId = payload.admin_graphql_api_id; // gid://shopify/Order/xxx
+    // Construct GraphQL ID from numeric ID if admin_graphql_api_id is not provided
+    const shopifyOrderId = payload.admin_graphql_api_id || `gid://shopify/Order/${orderId}`;
 
     // Get sale_order_id from order metafields
-    console.log(`🔍 [${webhookId}] Fetching metafields for order: ${shopifyOrderId}`);
+    console.log(`🔍 [${webhookId}] Fetching metafields for order: ${shopifyOrderId} (Order #${orderId})`);
 
     const metafieldsResponse = await admin.graphql(
       `#graphql
