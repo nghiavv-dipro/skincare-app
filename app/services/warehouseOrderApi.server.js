@@ -720,9 +720,11 @@ export function shouldFulfillOrder(deliveryStatus) {
  */
 export async function fulfillOrder(admin, orderId, trackingNumber) {
   try {
-    console.log(`[Warehouse Order API] 📦 Fulfilling order: ${orderId}`);
+    console.log(`[Warehouse] 📦 Start fulfilling order: ${orderId}`);
 
-    // Query order để lấy fulfillment orders thực tế
+    /** -----------------------------------------
+     *  STEP 1 — Fetch Fulfillment Orders
+     * ----------------------------------------*/
     const orderResponse = await admin.graphql(
       `#graphql
         query getOrder($id: ID!) {
@@ -734,142 +736,114 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
                 node {
                   id
                   status
+                  lineItems(first: 50) {
+                    edges {
+                      node {
+                        id
+                        remainingQuantity
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         }`,
-      {
-        variables: {
-          id: orderId,
-        },
-      }
+      { variables: { id: orderId } }
     );
 
     const orderData = await orderResponse.json();
-
-    // LOG: Full response để debug
-    console.log("[Warehouse Order API] 📋 GraphQL Response:", JSON.stringify(orderData, null, 2));
-
-    if (orderData.errors) {
-      console.error("[Warehouse Order API] ❌ GraphQL errors:", JSON.stringify(orderData.errors, null, 2));
-      return {
-        success: false,
-        error: "Failed to fetch order details",
-      };
-    }
+    console.log("[Warehouse] 🧾 Order GraphQL Response:", JSON.stringify(orderData, null, 2));
 
     const order = orderData.data?.order;
+    if (!order) return { success: false, error: "Order not found" };
 
-    if (!order) {
-      console.error("[Warehouse Order API] ❌ Order not found:", orderId);
-      console.error("[Warehouse Order API] 📋 Full response data:", JSON.stringify(orderData, null, 2));
-      return {
-        success: false,
-        error: "Order not found",
-      };
-    }
-
-    // LOG: Order structure
-    console.log("[Warehouse Order API] 📦 Order found:", {
-      id: order.id,
-      displayFulfillmentStatus: order.displayFulfillmentStatus,
-      fulfillmentOrdersCount: order.fulfillmentOrders?.edges?.length || 0,
-    });
-
-    // Check if already fulfilled
     if (order.displayFulfillmentStatus === "FULFILLED") {
-      console.log(`[Warehouse Order API] ⏭️ Order ${orderId} is already fulfilled, skipping`);
-      return {
-        success: true,
-        alreadyFulfilled: true,
-      };
+      console.log("[Warehouse] ⏭️ Order already fulfilled");
+      return { success: true, alreadyFulfilled: true };
     }
 
-    // Lấy fulfillment order ID thực tế
-    const fulfillmentOrders = order.fulfillmentOrders?.edges;
-
-    // LOG: Fulfillment orders details
-    console.log("[Warehouse Order API] 📋 Fulfillment orders:", JSON.stringify(order.fulfillmentOrders, null, 2));
-
-    if (!fulfillmentOrders || fulfillmentOrders.length === 0) {
-      console.error("[Warehouse Order API] ❌ No fulfillment orders found");
-      console.error("[Warehouse Order API] 📋 Order data:", JSON.stringify(order, null, 2));
-      return {
-        success: false,
-        error: "No fulfillment orders found",
-      };
+    const fulfillmentOrders = order.fulfillmentOrders?.edges || [];
+    if (fulfillmentOrders.length === 0) {
+      return { success: false, error: "No fulfillment orders found" };
     }
 
-    console.log(`[Warehouse Order API] 📋 Found ${fulfillmentOrders.length} fulfillment order(s)`);
+    /** -----------------------------------------
+     *  STEP 2 — Process each FulfillmentOrder
+     * ----------------------------------------*/
+    for (const foEdge of fulfillmentOrders) {
+      const fulfillmentOrder = foEdge.node;
+      const { id: foId, status, lineItems } = fulfillmentOrder;
 
-    // Fulfill từng fulfillment order
-    for (const edge of fulfillmentOrders) {
-      const fulfillmentOrder = edge.node;
-
-      // Skip nếu đã fulfilled
-      if (fulfillmentOrder.status === "CLOSED") {
-        console.log(`[Warehouse Order API] ⏭️ Fulfillment order ${fulfillmentOrder.id} already closed, skipping`);
+      if (status === "CLOSED") {
+        console.log(`[Warehouse] ⏭️ FO ${foId} already closed`);
         continue;
       }
 
-      console.log(`[Warehouse Order API] 📤 Creating fulfillment for: ${fulfillmentOrder.id}`);
+      // Map only lineItems with remainingQuantity > 0
+      const itemsToFulfill = lineItems.edges
+        .filter(edge => edge.node.remainingQuantity > 0)
+        .map(edge => ({
+          id: edge.node.id,
+          quantity: edge.node.remainingQuantity,
+        }));
 
+      if (itemsToFulfill.length === 0) {
+        console.log(`[Warehouse] ⏭️ No remaining quantity for FO ${foId}`);
+        continue;
+      }
+
+      console.log(`[Warehouse] 📤 Fulfilling FO: ${foId}`);
+      console.log(`[Warehouse] 📌 Line items:`, JSON.stringify(itemsToFulfill, null, 2));
+
+      /** -----------------------------------------
+       *  STEP 3 — Call fulfillmentCreateV2
+       * ----------------------------------------*/
       const fulfillmentResponse = await admin.graphql(
         `#graphql
-          mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+          mutation doFulfill($fulfillment: FulfillmentV2Input!) {
             fulfillmentCreateV2(fulfillment: $fulfillment) {
-              fulfillment {
-                id
-                status
-              }
-              userErrors {
-                field
-                message
-              }
+              fulfillment { id status }
+              userErrors { field message }
             }
           }`,
         {
           variables: {
             fulfillment: {
               lineItemsByFulfillmentOrder: {
-                fulfillmentOrderId: fulfillmentOrder.id,
-                fulfillmentOrderLineItems: [] // Empty array = fulfill toàn bộ
+                fulfillmentOrderId: foId,
+                fulfillmentOrderLineItems: itemsToFulfill,
               },
-              trackingInfo: trackingNumber ? {
-                number: trackingNumber,
-              } : undefined,
+              trackingInfo: trackingNumber
+                ? {
+                    number: trackingNumber,
+                    company: "Other",
+                  }
+                : undefined,
             },
           },
         }
       );
 
       const fulfillmentData = await fulfillmentResponse.json();
-      const errors = fulfillmentData.data?.fulfillmentCreateV2?.userErrors;
+      const userErrors = fulfillmentData.data?.fulfillmentCreateV2?.userErrors;
 
-      if (errors && errors.length > 0) {
-        console.error("[Warehouse Order API] ❌ Error creating fulfillment:", JSON.stringify(errors, null, 2));
-        return {
-          success: false,
-          error: errors[0].message,
-        };
+      if (userErrors?.length > 0) {
+        console.error("[Warehouse] ❌ Fulfillment error:", JSON.stringify(userErrors, null, 2));
+        return { success: false, error: userErrors[0].message };
       }
 
-      console.log(`[Warehouse Order API] ✅ Successfully created fulfillment for ${fulfillmentOrder.id}`);
+      console.log(`[Warehouse] ✅ Fulfilled FO ${foId}`);
     }
 
-    console.log(`[Warehouse Order API] ✅ Order fulfilled successfully`);
-    return {
-      success: true,
-    };
-  } catch (error) {
-    console.error("[Warehouse Order API] ❌ Error fulfilling order:", error);
-    return {
-      success: false,
-      error: error.message,
-    };
+    console.log(`[Warehouse] 🎉 Order fulfilled successfully`);
+    return { success: true };
+  } catch (err) {
+    console.error("[Warehouse] ❌ Exception:", err);
+    return { success: false, error: err.message };
   }
 }
+
 
 
 /**
