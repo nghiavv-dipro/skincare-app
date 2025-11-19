@@ -748,6 +748,9 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
 
     const orderData = await orderResponse.json();
 
+    // LOG: Full response để debug
+    console.log("[Warehouse Order API] 📋 GraphQL Response:", JSON.stringify(orderData, null, 2));
+
     if (orderData.errors) {
       console.error("[Warehouse Order API] ❌ GraphQL errors:", JSON.stringify(orderData.errors, null, 2));
       return {
@@ -760,11 +763,19 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
 
     if (!order) {
       console.error("[Warehouse Order API] ❌ Order not found:", orderId);
+      console.error("[Warehouse Order API] 📋 Full response data:", JSON.stringify(orderData, null, 2));
       return {
         success: false,
         error: "Order not found",
       };
     }
+
+    // LOG: Order structure
+    console.log("[Warehouse Order API] 📦 Order found:", {
+      id: order.id,
+      displayFulfillmentStatus: order.displayFulfillmentStatus,
+      fulfillmentOrdersCount: order.fulfillmentOrders?.edges?.length || 0,
+    });
 
     // Check if already fulfilled
     if (order.displayFulfillmentStatus === "FULFILLED") {
@@ -776,10 +787,14 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     }
 
     // Lấy fulfillment order ID thực tế
-    const fulfillmentOrders = order.fulfillmentOrders.edges;
+    const fulfillmentOrders = order.fulfillmentOrders?.edges;
+
+    // LOG: Fulfillment orders details
+    console.log("[Warehouse Order API] 📋 Fulfillment orders:", JSON.stringify(order.fulfillmentOrders, null, 2));
 
     if (!fulfillmentOrders || fulfillmentOrders.length === 0) {
       console.error("[Warehouse Order API] ❌ No fulfillment orders found");
+      console.error("[Warehouse Order API] 📋 Order data:", JSON.stringify(order, null, 2));
       return {
         success: false,
         error: "No fulfillment orders found",
