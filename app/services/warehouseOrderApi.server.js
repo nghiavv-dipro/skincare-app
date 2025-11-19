@@ -722,18 +722,18 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
   try {
     console.log(`[Warehouse Order API] 📦 Fulfilling order: ${orderId}`);
 
-    // First, get the order's line items and location
+    // Query order để lấy fulfillment orders thực tế
     const orderResponse = await admin.graphql(
       `#graphql
         query getOrder($id: ID!) {
           order(id: $id) {
             id
             displayFulfillmentStatus
-            lineItems(first: 100) {
+            fulfillmentOrders(first: 10) {
               edges {
                 node {
                   id
-                  quantity
+                  status
                 }
               }
             }
@@ -775,58 +775,35 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
       };
     }
 
-    // Create fulfillment for all line items
-    const lineItems = order.lineItems.edges.map(edge => ({
-      id: edge.node.id,
-      quantity: edge.node.quantity,
-    }));
+    // Lấy fulfillment order ID thực tế
+    const fulfillmentOrders = order.fulfillmentOrders.edges;
 
-    console.log(`[Warehouse Order API] 📋 Fulfilling ${lineItems.length} line items`);
+    if (!fulfillmentOrders || fulfillmentOrders.length === 0) {
+      console.error("[Warehouse Order API] ❌ No fulfillment orders found");
+      return {
+        success: false,
+        error: "No fulfillment orders found",
+      };
+    }
 
-    const fulfillmentResponse = await admin.graphql(
-      `#graphql
-        mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
-          fulfillmentCreateV2(fulfillment: $fulfillment) {
-            fulfillment {
-              id
-              status
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }`,
-      {
-        variables: {
-          fulfillment: {
-            lineItemsByFulfillmentOrder: [
-              {
-                fulfillmentOrderId: orderId.replace('/Order/', '/FulfillmentOrder/'),
-              }
-            ],
-            trackingInfo: trackingNumber ? {
-              number: trackingNumber,
-            } : undefined,
-          },
-        },
+    console.log(`[Warehouse Order API] 📋 Found ${fulfillmentOrders.length} fulfillment order(s)`);
+
+    // Fulfill từng fulfillment order
+    for (const edge of fulfillmentOrders) {
+      const fulfillmentOrder = edge.node;
+
+      // Skip nếu đã fulfilled
+      if (fulfillmentOrder.status === "CLOSED") {
+        console.log(`[Warehouse Order API] ⏭️ Fulfillment order ${fulfillmentOrder.id} already closed, skipping`);
+        continue;
       }
-    );
 
-    const fulfillmentData = await fulfillmentResponse.json();
+      console.log(`[Warehouse Order API] 📤 Creating fulfillment for: ${fulfillmentOrder.id}`);
 
-    const errors = fulfillmentData.data?.fulfillmentCreateV2?.userErrors;
-
-    if (errors && errors.length > 0) {
-      console.error("[Warehouse Order API] ❌ Error creating fulfillment:", JSON.stringify(errors, null, 2));
-
-      // Try alternative method: fulfillmentCreate (v1)
-      console.log("[Warehouse Order API] 🔄 Trying alternative fulfillment method...");
-
-      const altResponse = await admin.graphql(
+      const fulfillmentResponse = await admin.graphql(
         `#graphql
-          mutation fulfillmentCreate($input: FulfillmentInput!) {
-            fulfillmentCreate(input: $input) {
+          mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+            fulfillmentCreateV2(fulfillment: $fulfillment) {
               fulfillment {
                 id
                 status
@@ -839,9 +816,11 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
           }`,
         {
           variables: {
-            input: {
-              orderId: orderId,
-              lineItems: lineItems,
+            fulfillment: {
+              lineItemsByFulfillmentOrder: {
+                fulfillmentOrderId: fulfillmentOrder.id,
+                fulfillmentOrderLineItems: [] // Empty array = fulfill toàn bộ
+              },
               trackingInfo: trackingNumber ? {
                 number: trackingNumber,
               } : undefined,
@@ -850,21 +829,18 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
         }
       );
 
-      const altData = await altResponse.json();
-      const altErrors = altData.data?.fulfillmentCreate?.userErrors;
+      const fulfillmentData = await fulfillmentResponse.json();
+      const errors = fulfillmentData.data?.fulfillmentCreateV2?.userErrors;
 
-      if (altErrors && altErrors.length > 0) {
-        console.error("[Warehouse Order API] ❌ Error with alternative method:", JSON.stringify(altErrors, null, 2));
+      if (errors && errors.length > 0) {
+        console.error("[Warehouse Order API] ❌ Error creating fulfillment:", JSON.stringify(errors, null, 2));
         return {
           success: false,
-          error: altErrors[0].message,
+          error: errors[0].message,
         };
       }
 
-      console.log(`[Warehouse Order API] ✅ Order fulfilled successfully using alternative method`);
-      return {
-        success: true,
-      };
+      console.log(`[Warehouse Order API] ✅ Successfully created fulfillment for ${fulfillmentOrder.id}`);
     }
 
     console.log(`[Warehouse Order API] ✅ Order fulfilled successfully`);
@@ -879,6 +855,7 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     };
   }
 }
+
 
 /**
  * Cập nhật metafields cho Shopify order
