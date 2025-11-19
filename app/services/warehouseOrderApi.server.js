@@ -732,7 +732,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
             id
             name
             displayFulfillmentStatus
-            financialStatus
             displayFinancialStatus
             fulfillable
             shippingAddress { country }
@@ -773,7 +772,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     /** -----------------------------------------
      *  STEP 1B — Debug logs
      * ----------------------------------------*/
-    console.log("[Debug] financialStatus:", order.financialStatus);
     console.log("[Debug] displayFinancialStatus:", order.displayFinancialStatus);
     console.log("[Debug] displayFulfillmentStatus:", order.displayFulfillmentStatus);
     console.log("[Debug] fulfillable:", order.fulfillable);
@@ -797,7 +795,7 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
      * ----------------------------------------*/
     for (const foEdge of fulfillmentOrders) {
       const fulfillmentOrder = foEdge.node;
-      const { id: foId, status, lineItems } = fulfillmentOrder;
+      const { id: foId, status } = fulfillmentOrder;
 
       console.log(`[Debug] FO ${foId} status: ${status}`);
       console.log(`[Debug] FO supportedActionTypes:`, fulfillmentOrder.supportedActionTypes);
