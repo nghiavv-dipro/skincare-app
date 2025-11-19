@@ -732,7 +732,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
             id
             name
             displayFulfillmentStatus
-            fulfillmentStatus
             financialStatus
             displayFinancialStatus
             fulfillable
@@ -776,7 +775,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
      * ----------------------------------------*/
     console.log("[Debug] financialStatus:", order.financialStatus);
     console.log("[Debug] displayFinancialStatus:", order.displayFinancialStatus);
-    console.log("[Debug] fulfillmentStatus:", order.fulfillmentStatus);
     console.log("[Debug] displayFulfillmentStatus:", order.displayFulfillmentStatus);
     console.log("[Debug] fulfillable:", order.fulfillable);
     console.log("[Debug] cancelReason:", order.cancelReason);
