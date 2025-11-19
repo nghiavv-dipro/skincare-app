@@ -808,21 +808,7 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
         continue;
       }
 
-      // Map line items with remainingQuantity > 0
-      const itemsToFulfill = lineItems.edges
-        .filter(edge => edge.node.remainingQuantity > 0)
-        .map(edge => ({
-          id: edge.node.id,
-          quantity: edge.node.remainingQuantity,
-        }));
-
-      if (itemsToFulfill.length === 0) {
-        console.log(`[Warehouse] ⏭️ No remaining quantity for FO ${foId}`);
-        continue;
-      }
-
-      console.log(`[Warehouse] 📤 Fulfilling FO: ${foId}`);
-      console.log(`[Warehouse] 📌 Line items:`, JSON.stringify(itemsToFulfill, null, 2));
+      console.log(`[Warehouse] 📤 Fulfilling FO: ${foId} (full fulfillment)`);
 
       /** -----------------------------------------
        *  STEP 3 — Call fulfillmentCreateV2
@@ -840,7 +826,7 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
             fulfillment: {
               lineItemsByFulfillmentOrder: {
                 fulfillmentOrderId: foId,
-                fulfillmentOrderLineItems: itemsToFulfill,
+                fulfillmentOrderLineItems: [], // Empty array = fulfill toàn bộ
               },
               trackingInfo: trackingNumber
                 ? { number: trackingNumber, company: "Other" }
