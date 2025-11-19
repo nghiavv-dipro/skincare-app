@@ -735,15 +735,11 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
             displayFinancialStatus
             fulfillable
             shippingAddress { country }
-            cancelReason
             fulfillmentOrders(first: 10) {
               edges {
                 node {
                   id
                   status
-                  requestStatus
-                  supportedActionTypes
-                  assignedLocation { id name }
                   lineItems(first: 50) {
                     edges {
                       node {
@@ -775,7 +771,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     console.log("[Debug] displayFinancialStatus:", order.displayFinancialStatus);
     console.log("[Debug] displayFulfillmentStatus:", order.displayFulfillmentStatus);
     console.log("[Debug] fulfillable:", order.fulfillable);
-    console.log("[Debug] cancelReason:", order.cancelReason);
     console.log("[Debug] shippingCountry:", order.shippingAddress?.country);
     console.log("[Debug] fulfillmentOrders count:", order.fulfillmentOrders?.edges.length);
 
@@ -796,10 +791,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     for (const foEdge of fulfillmentOrders) {
       const fulfillmentOrder = foEdge.node;
       const { id: foId, status } = fulfillmentOrder;
-
-      console.log(`[Debug] FO ${foId} status: ${status}`);
-      console.log(`[Debug] FO supportedActionTypes:`, fulfillmentOrder.supportedActionTypes);
-      console.log(`[Debug] FO assignedLocation:`, fulfillmentOrder.assignedLocation);
 
       if (status === "CLOSED") {
         console.log(`[Warehouse] ⏭️ FO ${foId} already closed`);
