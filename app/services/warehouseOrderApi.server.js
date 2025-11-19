@@ -723,19 +723,29 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     console.log(`[Warehouse] 📦 Start fulfilling order: ${orderId}`);
 
     /** -----------------------------------------
-     *  STEP 1 — Fetch Fulfillment Orders
+     *  STEP 1 — Fetch Fulfillment Orders + financial info
      * ----------------------------------------*/
     const orderResponse = await admin.graphql(
       `#graphql
         query getOrder($id: ID!) {
           order(id: $id) {
             id
+            name
             displayFulfillmentStatus
+            fulfillmentStatus
+            financialStatus
+            displayFinancialStatus
+            fulfillable
+            shippingAddress { country }
+            cancelReason
             fulfillmentOrders(first: 10) {
               edges {
                 node {
                   id
                   status
+                  requestStatus
+                  supportedActionTypes
+                  assignedLocation { id name }
                   lineItems(first: 50) {
                     edges {
                       node {
@@ -756,7 +766,22 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     console.log("[Warehouse] 🧾 Order GraphQL Response:", JSON.stringify(orderData, null, 2));
 
     const order = orderData.data?.order;
-    if (!order) return { success: false, error: "Order not found" };
+    if (!order) {
+      console.error("[Warehouse] ❌ Order not found");
+      return { success: false, error: "Order not found" };
+    }
+
+    /** -----------------------------------------
+     *  STEP 1B — Debug logs
+     * ----------------------------------------*/
+    console.log("[Debug] financialStatus:", order.financialStatus);
+    console.log("[Debug] displayFinancialStatus:", order.displayFinancialStatus);
+    console.log("[Debug] fulfillmentStatus:", order.fulfillmentStatus);
+    console.log("[Debug] displayFulfillmentStatus:", order.displayFulfillmentStatus);
+    console.log("[Debug] fulfillable:", order.fulfillable);
+    console.log("[Debug] cancelReason:", order.cancelReason);
+    console.log("[Debug] shippingCountry:", order.shippingAddress?.country);
+    console.log("[Debug] fulfillmentOrders count:", order.fulfillmentOrders?.edges.length);
 
     if (order.displayFulfillmentStatus === "FULFILLED") {
       console.log("[Warehouse] ⏭️ Order already fulfilled");
@@ -765,6 +790,7 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
 
     const fulfillmentOrders = order.fulfillmentOrders?.edges || [];
     if (fulfillmentOrders.length === 0) {
+      console.warn("[Warehouse] ⚠️ No fulfillment orders found. Check if order is paid and fulfillable.");
       return { success: false, error: "No fulfillment orders found" };
     }
 
@@ -775,12 +801,16 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
       const fulfillmentOrder = foEdge.node;
       const { id: foId, status, lineItems } = fulfillmentOrder;
 
+      console.log(`[Debug] FO ${foId} status: ${status}`);
+      console.log(`[Debug] FO supportedActionTypes:`, fulfillmentOrder.supportedActionTypes);
+      console.log(`[Debug] FO assignedLocation:`, fulfillmentOrder.assignedLocation);
+
       if (status === "CLOSED") {
         console.log(`[Warehouse] ⏭️ FO ${foId} already closed`);
         continue;
       }
 
-      // Map only lineItems with remainingQuantity > 0
+      // Map line items with remainingQuantity > 0
       const itemsToFulfill = lineItems.edges
         .filter(edge => edge.node.remainingQuantity > 0)
         .map(edge => ({
@@ -815,10 +845,7 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
                 fulfillmentOrderLineItems: itemsToFulfill,
               },
               trackingInfo: trackingNumber
-                ? {
-                    number: trackingNumber,
-                    company: "Other",
-                  }
+                ? { number: trackingNumber, company: "Other" }
                 : undefined,
             },
           },
@@ -843,8 +870,6 @@ export async function fulfillOrder(admin, orderId, trackingNumber) {
     return { success: false, error: err.message };
   }
 }
-
-
 
 /**
  * Cập nhật metafields cho Shopify order
